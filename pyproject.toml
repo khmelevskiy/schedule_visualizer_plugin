@@ -1,0 +1,96 @@
+[project]
+name = "airflow-schedule-visualizer"
+version = "0.1.0"
+description = "Airflow 3 plugin: visualize DAG/task schedule load and find the least-busy slots."
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.14"
+authors = [{ name = "khmelevskiy" }]
+keywords = ["airflow", "apache-airflow", "plugin", "scheduling", "cron", "visualization"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Framework :: Apache Airflow",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: System :: Monitoring",
+]
+
+# Airflow (and its bundled FastAPI/Starlette) is provided by the host install,
+# not pinned here — keeps the plugin conflict-free across Airflow 3.x. The pure
+# core has no runtime deps at all.
+dependencies = []
+
+[project.optional-dependencies]
+# Everything needed to actually load the plugin in an Airflow 3 api-server.
+# Declared as an extra so `pip install airflow-schedule-visualizer` stays light
+# and the pure core is importable without Airflow.
+airflow = ["apache-airflow>=3.1"]
+
+[project.urls]
+Homepage = "https://github.com/khmelevskiy/schedule_visualizer_plugin"
+Repository = "https://github.com/khmelevskiy/schedule_visualizer_plugin"
+Issues = "https://github.com/khmelevskiy/schedule_visualizer_plugin/issues"
+
+[project.entry-points."airflow.plugins"]
+schedule_visualizer = "schedule_visualizer.plugin:ScheduleVisualizerPlugin"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+# The built UI lives under static/ but is git-ignored (generated from frontend/).
+# Force it into BOTH sdist and wheel: `uv build` builds the wheel from the sdist,
+# so if the sdist omits static/ the published wheel ships with no UI. Build the
+# frontend (`make frontend-build`) before `uv build`.
+[tool.hatch.build]
+artifacts = ["src/schedule_visualizer/static/**/*"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/schedule_visualizer"]
+
+[dependency-groups]
+dev = [
+    "commitizen>=4.16.2",
+    "pre-commit>=4.6.0",
+    "pytest>=9.0.3",
+    "ruff>=0.15.13",
+    "ty>=0.0.37",
+    "yamllint>=1.38.0",
+]
+
+[tool.commitizen]
+name = "cz_conventional_commits"
+version_provider = "pep621"
+tag_format = "v$version"
+update_changelog_on_bump = false
+# Keep the frontend package version in lockstep with the Python package on bump.
+version_files = ["frontend/package.json:\"version\""]
+
+[tool.ruff]
+target-version = "py314"
+line-length = 120
+fix = true
+
+[tool.ruff.lint]
+extend-select = ["I"]
+
+[tool.ty.environment]
+root = ["src"]
+python-version = "3.14"
+
+[tool.ty.rules]
+# Host dev venv has no Airflow; the plugin/adapter modules import it at runtime.
+unresolved-import = "ignore"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+# Silence two benign warnings from Airflow's own dependencies (not our code), so
+# real warnings stay visible: Starlette's TestClient/httpx deprecation, and
+# cron_descriptor complaining about an unset system locale.
+filterwarnings = [
+    "ignore:Using `httpx` with `starlette.testclient`",
+    "ignore:No system locale set",
+]

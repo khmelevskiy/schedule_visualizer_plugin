@@ -1,0 +1,58 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-added-large-files
+        args: ["--maxkb=3072"]
+      - id: check-merge-conflict
+      - id: check-toml
+      - id: check-yaml
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+
+  # ruff via local system hook — pyproject.toml is the single source of truth
+  # for the ruff version and config (no separate `rev:`).
+  - repo: local
+    hooks:
+      - id: ruff-check
+        name: ruff check
+        entry: uv run ruff check
+        language: system
+        types_or: [python]
+        args: ["--fix", "--force-exclude", "--config", "pyproject.toml"]
+      - id: ruff-format
+        name: ruff format
+        entry: uv run ruff format
+        language: system
+        types_or: [python]
+        args: ["--force-exclude", "--config", "pyproject.toml"]
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+
+  - repo: https://github.com/adrienverge/yamllint
+    rev: v1.38.0
+    hooks:
+      - id: yamllint
+
+  # ty (Astral type checker) — local hook; version from pyproject. Runs over the
+  # whole package for cross-file resolution.
+  - repo: local
+    hooks:
+      - id: ty
+        name: ty (type check)
+        entry: uv run ty check src/
+        language: system
+        types: [python]
+        pass_filenames: false
+
+  - repo: local
+    hooks:
+      - id: commitizen-msg
+        name: commitizen check (commit-msg)
+        entry: uv run cz check
+        args: ["--commit-msg-file"]
+        language: system
+        stages: [commit-msg]
