@@ -43,10 +43,13 @@ say so in the PR.
   Docstrings are numpy-style; comments explain *why*, never restate code.
 - Times are UTC end to end (see the note in `README.md`).
 - Code, comments and commits in English.
-- **Conventional Commits**, enforced by commitizen (the `commit-msg` hook).
-  `make bump` sets the next version across `pyproject.toml` and the frontend.
+- **Conventional Commits**: the `commit-msg` hook checks your local commits, and
+  since PRs are squash-merged the **PR title** becomes the commit — so it must be
+  a Conventional Commit too. `make bump` sets the next version across
+  `pyproject.toml` and the frontend.
 
 ## Pull requests
 
-Keep them small and reviewable. Describe the risk for anything touching
-dependencies, the plugin entry point, or the metadata-DB queries.
+`main` is protected — changes land via PR, squash-merged (the PR title becomes the
+commit, its branch auto-deleted). Keep them small and reviewable; describe the risk
+for anything touching dependencies, the plugin entry point, or the metadata-DB queries.
