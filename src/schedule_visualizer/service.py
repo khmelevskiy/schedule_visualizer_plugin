@@ -13,11 +13,11 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
-from schedule_visualizer.airflow_io.adapter import ScheduledDag, collect_events
+from schedule_visualizer.airflow_io.adapter import ScheduledDag, group_runs
 from schedule_visualizer.airflow_io.loader import TeamResolver, load_scheduled_dags
 from schedule_visualizer.cache import Clock, TtlCache
 from schedule_visualizer.config import Config
-from schedule_visualizer.core import ScheduleAggregate, aggregate
+from schedule_visualizer.core import ScheduleAggregate
 
 log = logging.getLogger(__name__)
 
@@ -89,8 +89,16 @@ def aggregate_dags(dags: Iterable[ScheduledDag], *, now: datetime, window_days: 
     all_dags = list(dags)
     active_dags = [dag for dag in all_dags if not dag.paused]
 
+    # Expand each distinct schedule at most once, shared across both aggregates.
+    run_times: dict[str, list[datetime]] = {}
+
     def _agg(subset: list[ScheduledDag]) -> ScheduleAggregate:
-        return aggregate(collect_events(subset, window_start=start, window_end=end), window_start=start, window_end=end)
+        agg = ScheduleAggregate(window_start=start, window_end=end)
+        for times, team, dag_count, task_sum in group_runs(
+            subset, window_start=start, window_end=end, run_times=run_times
+        ):
+            agg.add_runs(times, team=team, dags=dag_count, tasks=task_sum)
+        return agg
 
     aggregates = Aggregates(active=_agg(active_dags), all=_agg(all_dags))
     # One line per recompute (once per TTL) — not per request, to avoid log spam.

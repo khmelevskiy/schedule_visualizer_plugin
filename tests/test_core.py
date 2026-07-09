@@ -2,7 +2,7 @@ from datetime import date, datetime, timezone
 
 import pytest
 
-from schedule_visualizer.core import Counts, RunEvent, aggregate
+from schedule_visualizer.core import Counts, RunEvent, ScheduleAggregate, aggregate
 
 WINDOW_START = datetime(2026, 6, 1, tzinfo=timezone.utc)
 WINDOW_END = datetime(2026, 6, 8, tzinfo=timezone.utc)  # 7-day window
@@ -83,6 +83,45 @@ def test_minute_series_places_run_at_its_minute_of_day() -> None:
     assert len(minutes) == 1440
     assert minutes[9 * 60 + 30] == Counts(1, 5)
     assert minutes[0] == Counts()  # empty minute
+
+
+# endregion
+
+# region weighted add_runs
+
+
+def test_add_runs_weighted_equals_per_event() -> None:
+    times = [datetime(2026, 6, 2, 9, 0, tzinfo=timezone.utc), datetime(2026, 6, 3, 9, 0, tzinfo=timezone.utc)]
+    weighted = ScheduleAggregate(WINDOW_START, WINDOW_END)
+    weighted.add_runs(times, team="a", dags=2, tasks=5)  # 2 DAGs sharing this schedule, 5 tasks total
+    # Same load expressed one event per DAG per run (task counts 3 + 2 = 5).
+    per_event = _agg(
+        [
+            RunEvent(times[0], 3, "a"),
+            RunEvent(times[0], 2, "a"),
+            RunEvent(times[1], 3, "a"),
+            RunEvent(times[1], 2, "a"),
+        ]
+    )
+    assert weighted.view().day_series() == per_event.view().day_series()
+    assert weighted.view().minute_series() == per_event.view().minute_series()
+    assert weighted.view().by_week_minute == per_event.view().by_week_minute
+    assert weighted.teams == per_event.teams
+
+
+def test_add_runs_skips_runs_outside_window() -> None:
+    agg = ScheduleAggregate(WINDOW_START, WINDOW_END)
+    inside = datetime(2026, 6, 2, tzinfo=timezone.utc)
+    outside = datetime(2026, 6, 30, tzinfo=timezone.utc)  # past window_end
+    agg.add_runs([inside, outside], team=None, dags=1, tasks=4)
+    assert sum(c.dags for _, c in agg.view().day_series()) == 1
+
+
+def test_add_runs_zero_dags_is_noop() -> None:
+    agg = ScheduleAggregate(WINDOW_START, WINDOW_END)
+    agg.add_runs([datetime(2026, 6, 2, tzinfo=timezone.utc)], team="a", dags=0, tasks=0)
+    assert agg.teams == []
+    assert sum(c.dags for _, c in agg.view().day_series()) == 0
 
 
 # endregion

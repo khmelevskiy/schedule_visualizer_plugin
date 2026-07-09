@@ -39,3 +39,7 @@ export function untilLabel(iso: string, now: Date = new Date()): string {
 }
 
 export const teamLabel = (team: string | null): string => team ?? "untagged";
+
+// Minute-of-day (0..1439) → "HH:MM".
+export const hhmm = (minute: number): string =>
+  `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;

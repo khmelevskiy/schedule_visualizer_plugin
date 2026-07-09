@@ -3,6 +3,8 @@ import { fetchSchedule, type Metric, type Schedule } from "./api";
 import { BarChart } from "./components/BarChart";
 import { Controls } from "./components/Controls";
 import { Heatmap } from "./components/Heatmap";
+import { LineChart } from "./components/LineChart";
+import { MinuteHeatmap } from "./components/MinuteHeatmap";
 import { SortableTable } from "./components/SortableTable";
 import { Suggest } from "./components/Suggest";
 import { dayLabel, isWeekend, metricOf, shortDay, timeAgo, untilLabel } from "./format";
@@ -19,6 +21,8 @@ export function App() {
   const [selected, setSelected] = useState<string[]>([]);
   const [includePaused, setIncludePaused] = useState(false);
   const [tab, setTab] = useState<Tab>("heatmap");
+  const [heatRes, setHeatRes] = useState<"day" | "minute">("day");
+  const [hourRes, setHourRes] = useState<"hour" | "minute">("hour");
   const [data, setData] = useState<Schedule | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tip, setTip] = useState<{ text: string; x: number; y: number } | null>(null);
@@ -55,6 +59,9 @@ export function App() {
     () => data?.hours.map((h) => ({ label: String(h.hour), title: `${String(h.hour).padStart(2, "0")}:00`, value: metricOf(h, metric) })) ?? [],
     [data, metric],
   );
+  // One value per minute-of-day (slots is all 1440, minute-ordered) — reused by
+  // the minute line and the hour×minute heatmap.
+  const minutePoints = useMemo(() => data?.slots.map((s) => metricOf(s, metric)) ?? [], [data, metric]);
 
   if (error) return <div className="app"><div className="state">Failed to load: {error}</div></div>;
   if (!data) return <div className="app"><div className="state">Loading…</div></div>;
@@ -96,18 +103,36 @@ export function App() {
 
       {tab === "heatmap" && (
         <div className="card">
-          <h2>Load by day & hour</h2>
-          <p className="hint">Darker/warmer = busier. Cool cells are open slots. Hours in {data.meta.timezone}.</p>
-          <Heatmap
-            rows={data.heatmap.rows}
-            hours={data.heatmap.hours}
-            metric={metric}
-            shortDay={shortDay}
-            dayTitle={dayLabel}
-            weekend={isWeekend}
-            onHover={showTip}
-            onLeave={hideTip}
-          />
+          <div className="card-head">
+            <h2>{heatRes === "day" ? "Load by day & hour" : "Load by hour & minute"}</h2>
+            <div className="toggle">
+              <button className={heatRes === "day" ? "active" : ""} onClick={() => setHeatRes("day")}>
+                Day × Hour
+              </button>
+              <button className={heatRes === "minute" ? "active" : ""} onClick={() => setHeatRes("minute")}>
+                Hour × Minute
+              </button>
+            </div>
+          </div>
+          <p className="hint">
+            {heatRes === "day"
+              ? `Darker/warmer = busier. Cool cells are open slots. Hours in ${data.meta.timezone}.`
+              : `Rows are hours, columns minutes. Warmer = busier. Summed over ${data.meta.window_days} days (${data.meta.timezone}).`}
+          </p>
+          {heatRes === "day" ? (
+            <Heatmap
+              rows={data.heatmap.rows}
+              hours={data.heatmap.hours}
+              metric={metric}
+              shortDay={shortDay}
+              dayTitle={dayLabel}
+              weekend={isWeekend}
+              onHover={showTip}
+              onLeave={hideTip}
+            />
+          ) : (
+            <MinuteHeatmap points={minutePoints} unit={metric} onHover={showTip} onLeave={hideTip} />
+          )}
           <div className="legend">
             <span className="swatch" style={{ background: "var(--heat-0)" }} />
             free
@@ -126,11 +151,27 @@ export function App() {
             <BarChart bars={dayBars} labelEvery={dayLabelEvery} unit={metric} onHover={showTip} onLeave={hideTip} />
           </div>
           <div className="card">
-            <h2>Load by time of day</h2>
+            <div className="card-head">
+              <h2>Load by time of day</h2>
+              <div className="toggle">
+                <button className={hourRes === "hour" ? "active" : ""} onClick={() => setHourRes("hour")}>
+                  Hour
+                </button>
+                <button className={hourRes === "minute" ? "active" : ""} onClick={() => setHourRes("minute")}>
+                  Minutes
+                </button>
+              </div>
+            </div>
             <p className="hint">
-              Totals per hour across the {data.meta.window_days}-day window ({data.meta.timezone}).
+              {hourRes === "hour"
+                ? `Totals per hour across the ${data.meta.window_days}-day window (${data.meta.timezone}).`
+                : `Totals per minute of the day across the ${data.meta.window_days}-day window (${data.meta.timezone}) — spikes on round minutes stand out.`}
             </p>
-            <BarChart bars={hourBars} unit={metric} onHover={showTip} onLeave={hideTip} />
+            {hourRes === "hour" ? (
+              <BarChart bars={hourBars} unit={metric} onHover={showTip} onLeave={hideTip} />
+            ) : (
+              <LineChart points={minutePoints} unit={metric} onHover={showTip} onLeave={hideTip} />
+            )}
           </div>
         </div>
       )}

@@ -188,3 +188,56 @@ def collect_events(
             run_times[key] = times
         for when in times:
             yield RunEvent(when=when, task_count=dag.task_count, team=dag.team)
+
+
+def group_runs(
+    dags: Iterable[ScheduledDag],
+    *,
+    window_start: datetime,
+    window_end: datetime,
+    cap_per_dag: int = DEFAULT_RUN_CAP,
+    run_times: dict[str, list[datetime]] | None = None,
+) -> Iterator[tuple[list[datetime], str | None, int, int]]:
+    """Group DAGs by ``(schedule, team)`` and yield each group's shared run times.
+
+    The weighted counterpart to :func:`collect_events`: instead of one event per
+    DAG per run, it folds DAGs that share a schedule *and* team into a single
+    group and emits that schedule's run times once, tagged with the group's DAG
+    count and summed task count. Aggregating those costs ``O(runs)`` per group,
+    not ``O(runs * DAGs)`` — the difference between fast and unusable when many
+    DAGs share a high-frequency schedule.
+
+    Parameters
+    ----------
+    dags : Iterable[ScheduledDag]
+        DAGs to group.
+    window_start, window_end : datetime
+        Half-open window ``[window_start, window_end)``.
+    cap_per_dag : int
+        Per-schedule expansion ceiling (see :func:`iter_runs`).
+    run_times : dict[str, list[datetime]] | None
+        Expansion cache keyed by schedule. Pass a shared dict to reuse
+        expansions across several calls (e.g. the active-only and all-DAGs
+        aggregates), so each distinct schedule is expanded at most once.
+
+    Yields
+    ------
+    tuple[list[datetime], str | None, int, int]
+        ``(run_times, team, dag_count, task_sum)`` per ``(schedule, team)`` group.
+    """
+    cache = {} if run_times is None else run_times
+    groups: dict[tuple[str, str | None], list] = {}  # (schedule, team) -> [dag_count, task_sum, timetable]
+    for dag in dags:
+        gkey = (_timetable_key(dag.timetable), dag.team)
+        group = groups.get(gkey)
+        if group is None:
+            groups[gkey] = [1, dag.task_count, dag.timetable]
+        else:
+            group[0] += 1
+            group[1] += dag.task_count
+    for (schedule_key, team), (dag_count, task_sum, timetable) in groups.items():
+        times = cache.get(schedule_key)
+        if times is None:
+            times = list(iter_runs(timetable, window_start=window_start, window_end=window_end, cap=cap_per_dag))
+            cache[schedule_key] = times
+        yield times, team, dag_count, task_sum

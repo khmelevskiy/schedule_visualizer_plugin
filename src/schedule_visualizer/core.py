@@ -82,14 +82,14 @@ def _minute_of_day(moment: datetime) -> int:
     return moment.hour * 60 + moment.minute
 
 
-def _bump[K](store: dict[tuple[K, str | None], list[int]], key: tuple[K, str | None], task_count: int) -> None:
-    """Add one run (``+1`` dag, ``+task_count`` tasks) to ``store[key]``."""
+def _bump_by[K](store: dict[tuple[K, str | None], list[int]], key: tuple[K, str | None], dags: int, tasks: int) -> None:
+    """Add ``dags`` runs / ``tasks`` tasks to ``store[key]``."""
     bucket = store.get(key)
     if bucket is None:
-        store[key] = [1, task_count]
+        store[key] = [dags, tasks]
     else:
-        bucket[0] += 1
-        bucket[1] += task_count
+        bucket[0] += dags
+        bucket[1] += tasks
 
 
 def _sum_teams[K](
@@ -224,9 +224,41 @@ class ScheduleAggregate:
             return
         self._teams.add(event.team)
         minute = _minute_of_day(event.when)
-        _bump(self._by_day_hour, ((event.when.date(), event.when.hour), event.team), event.task_count)
-        _bump(self._by_minute, (minute, event.team), event.task_count)
-        _bump(self._by_week_minute, (event.when.weekday() * MINUTES_PER_DAY + minute, event.team), event.task_count)
+        _bump_by(self._by_day_hour, ((event.when.date(), event.when.hour), event.team), 1, event.task_count)
+        _bump_by(self._by_minute, (minute, event.team), 1, event.task_count)
+        _bump_by(
+            self._by_week_minute, (event.when.weekday() * MINUTES_PER_DAY + minute, event.team), 1, event.task_count
+        )
+
+    def add_runs(self, times: Iterable[datetime], *, team: str | None, dags: int, tasks: int) -> None:
+        """Fold a whole schedule in at once, weighted by how many DAGs share it.
+
+        Adds ``dags`` / ``tasks`` at each in-window run time. Equivalent to adding
+        ``dags`` separate events per time whose task counts sum to ``tasks`` — but
+        DAGs sharing a schedule are folded in one pass instead of one event each,
+        so a schedule shared by many DAGs costs O(runs), not O(runs * DAGs).
+
+        Parameters
+        ----------
+        times : Iterable[datetime]
+            Planned run times (the adapter already bounds them to the window).
+        team : str | None
+            Owning team of the group.
+        dags : int
+            Number of DAGs in the group (weight for the "dags" metric).
+        tasks : int
+            Summed task count across the group (weight for the "tasks" metric).
+        """
+        if dags == 0:
+            return
+        for when in times:
+            if not self.window_start <= when < self.window_end:
+                continue
+            self._teams.add(team)
+            minute = _minute_of_day(when)
+            _bump_by(self._by_day_hour, ((when.date(), when.hour), team), dags, tasks)
+            _bump_by(self._by_minute, (minute, team), dags, tasks)
+            _bump_by(self._by_week_minute, (when.weekday() * MINUTES_PER_DAY + minute, team), dags, tasks)
 
     @property
     def teams(self) -> list[str | None]:

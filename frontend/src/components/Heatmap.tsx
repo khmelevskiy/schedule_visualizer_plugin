@@ -1,5 +1,6 @@
 import type { HeatmapRow, Metric } from "../api";
 import { metricOf } from "../format";
+import { heatColor } from "../heat";
 
 interface Cursor {
   clientX: number;
@@ -15,14 +16,6 @@ interface Props {
   weekend: (iso: string) => boolean;
   onHover: (text: string, cursor: Cursor) => void;
   onLeave: () => void;
-}
-
-// A green-through-red scale: free slots stay neutral, load ramps to warm.
-function color(ratio: number): string {
-  if (ratio <= 0) return "var(--heat-0)";
-  const hue = 145 - ratio * 145; // 145 (green) -> 0 (red)
-  const light = 68 - ratio * 20;
-  return `hsl(${hue}, 72%, ${light}%)`;
 }
 
 export function Heatmap({ rows, hours, metric, shortDay, dayTitle, weekend, onHover, onLeave }: Props) {
@@ -61,7 +54,7 @@ export function Heatmap({ rows, hours, metric, shortDay, dayTitle, weekend, onHo
                     width={cell}
                     height={cell}
                     rx={3}
-                    fill={color(value / max)}
+                    fill={heatColor(value / max)}
                     onMouseMove={(e) => onHover(`${dayTitle(row.date)}, ${String(h).padStart(2, "0")}:00 — ${value} ${metric}`, e)}
                     onMouseLeave={onLeave}
                   />

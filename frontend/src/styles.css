@@ -259,9 +259,20 @@ th.num {
 }
 
 .bar-svg text,
-.heatmap-svg text {
+.heatmap-svg text,
+.line-svg text {
   fill: var(--muted);
   font-size: 10px;
+}
+
+/* Card header with a resolution toggle on the right (hour/minute charts). */
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 2px;
 }
 
 .chart-scroll {

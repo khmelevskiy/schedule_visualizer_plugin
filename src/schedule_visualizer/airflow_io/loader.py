@@ -14,21 +14,16 @@ GitDagBundle name instead.
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
 from airflow.models.dag import DagModel
 from airflow.models.serialized_dag import SerializedDagModel
+from airflow.serialization.serialized_objects import decode_timetable
 from airflow.utils.session import create_session
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from schedule_visualizer.airflow_io.adapter import ScheduledDag
 from schedule_visualizer.config import DEFAULT_TEAM_TAG_PREFIX, Config
-
-if TYPE_CHECKING:
-    # Only needed as a type hint. Keeping it out of runtime imports avoids
-    # coupling to a semi-internal module path that may move between Airflow 3.x
-    # minors — the actual objects arrive via SerializedDagModel.read_all_dags.
-    from airflow.serialization.definitions.dag import SerializedDAG
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,12 +115,19 @@ def resolver_for(config: Config) -> TeamResolver:
     return team_from_tag(config.team_tag_prefix)
 
 
-def _to_scheduled_dag(sd: SerializedDAG, meta: DagMeta, team_of: TeamResolver, *, paused: bool) -> ScheduledDag:
-    """Project one serialized DAG + its metadata into a :class:`ScheduledDag`."""
+def _to_scheduled_dag(dag_data: dict, meta: DagMeta, team_of: TeamResolver, *, paused: bool) -> ScheduledDag:
+    """Project one serialized-DAG payload + its metadata into a :class:`ScheduledDag`.
+
+    Reads the timetable and task count straight from the serialized JSON
+    (``dag_data`` is ``SerializedDagModel.data["dag"]``), so the DAG's operators
+    are never instantiated — much faster than a full deserialization, and free of
+    the provider imports one would demand. The caller guarantees a ``timetable``
+    key is present.
+    """
     return ScheduledDag(
         dag_id=meta.dag_id,
-        task_count=len(sd.tasks),
-        timetable=sd.timetable,
+        task_count=len(dag_data.get("tasks", [])),
+        timetable=decode_timetable(dag_data["timetable"]),
         team=team_of(meta),
         paused=paused,
     )
@@ -157,20 +159,28 @@ def load_scheduled_dags(*, team_of: TeamResolver | None = None, include_paused: 
     Returns
     -------
     list[ScheduledDag]
-        One entry per active DAG that has a serialized snapshot. DAGs with no
-        time-based schedule stay in the list and simply expand to zero runs.
+        One entry per active DAG that has a serialized snapshot *and* a
+        time-based schedule. DAGs with no timetable (e.g. asset-triggered) are
+        skipped — they carry no planned load.
     """
     resolve = team_of if team_of is not None else team_from_tag()
     with create_session() as session:
-        stmt = select(DagModel).where(DagModel.is_stale.is_(False))
+        # Eager-load tags: the resolver reads them per DAG, and a lazy load would
+        # fire one query per DAG (N+1) on a metadata DB that may be remote.
+        stmt = select(DagModel).where(DagModel.is_stale.is_(False)).options(selectinload(DagModel.tags))
         if not include_paused:
             stmt = stmt.where(DagModel.is_paused.is_(False))
         rows = session.scalars(stmt).all()
-        serialized = SerializedDagModel.read_all_dags(session=session)
+        # Raw serialized payloads: `.data` is the stored JSON, NOT a deserialized
+        # DAG (that is `.dag` / read_all_dags) — so no operators are built.
+        payloads = {row.dag_id: row.data for row in session.scalars(select(SerializedDagModel)).all()}
         result: list[ScheduledDag] = []
         for row in rows:
-            sd = serialized.get(row.dag_id)
-            if sd is None:
+            payload = payloads.get(row.dag_id)
+            if payload is None:
                 continue
-            result.append(_to_scheduled_dag(sd, _meta_of(row), resolve, paused=bool(row.is_paused)))
+            dag_data = payload["dag"]
+            if not dag_data.get("timetable"):
+                continue
+            result.append(_to_scheduled_dag(dag_data, _meta_of(row), resolve, paused=bool(row.is_paused)))
     return result

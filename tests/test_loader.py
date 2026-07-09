@@ -18,11 +18,12 @@ from schedule_visualizer.airflow_io.loader import (  # noqa: E402
 from schedule_visualizer.config import Config  # noqa: E402
 
 
-def _serialized(dag_id: str, *, schedule: str, tasks: int, tags: list[str]):
+def _serialized(dag_id: str, *, schedule: str, tasks: int, tags: list[str]) -> dict:
+    """Return the raw serialized ``dag`` payload — what the loader reads from the DB."""
     with DAG(dag_id=dag_id, schedule=schedule, start_date=dt.datetime(2026, 1, 1), catchup=False, tags=tags) as dag:
         for i in range(tasks):
             EmptyOperator(task_id=f"t{i}")
-    return DagSerialization.from_dict(DagSerialization.to_dict(dag))
+    return DagSerialization.to_dict(dag)["dag"]
 
 
 # region team_from_tag
@@ -63,9 +64,9 @@ def test_resolver_for_picks_by_config() -> None:
 
 
 def test_to_scheduled_dag_maps_fields() -> None:
-    sd = _serialized("demo", schedule="0 * * * *", tasks=3, tags=["team:beta"])
-    meta = DagMeta("demo", frozenset(sd.tags), ("airflow",), "beta-bundle")
-    scheduled = _to_scheduled_dag(sd, meta, team_from_tag(), paused=True)
+    dag_data = _serialized("demo", schedule="0 * * * *", tasks=3, tags=["team:beta"])
+    meta = DagMeta("demo", frozenset({"team:beta"}), ("airflow",), "beta-bundle")
+    scheduled = _to_scheduled_dag(dag_data, meta, team_from_tag(), paused=True)
 
     assert scheduled.dag_id == "demo"
     assert scheduled.task_count == 3
@@ -75,9 +76,9 @@ def test_to_scheduled_dag_maps_fields() -> None:
 
 
 def test_to_scheduled_dag_untagged_has_no_team() -> None:
-    sd = _serialized("plain", schedule="@daily", tasks=1, tags=["etl"])
-    meta = DagMeta("plain", frozenset(sd.tags), (), None)
-    scheduled = _to_scheduled_dag(sd, meta, team_from_tag(), paused=False)
+    dag_data = _serialized("plain", schedule="@daily", tasks=1, tags=["etl"])
+    meta = DagMeta("plain", frozenset({"etl"}), (), None)
+    scheduled = _to_scheduled_dag(dag_data, meta, team_from_tag(), paused=False)
     assert scheduled.team is None
     assert scheduled.paused is False
 

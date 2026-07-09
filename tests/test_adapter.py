@@ -7,8 +7,14 @@ pytest.importorskip("airflow")  # adapter tests need Airflow installed
 from airflow.timetables.interval import CronDataIntervalTimetable  # noqa: E402
 from airflow.timetables.trigger import CronTriggerTimetable  # noqa: E402
 
-from schedule_visualizer.airflow_io.adapter import ScheduledDag, collect_events, events_for, iter_runs  # noqa: E402
-from schedule_visualizer.core import aggregate  # noqa: E402
+from schedule_visualizer.airflow_io.adapter import (  # noqa: E402
+    ScheduledDag,
+    collect_events,
+    events_for,
+    group_runs,
+    iter_runs,
+)
+from schedule_visualizer.core import ScheduleAggregate, aggregate  # noqa: E402
 
 WINDOW_START = datetime(2026, 6, 1, tzinfo=timezone.utc)
 WINDOW_END = datetime(2026, 6, 3, tzinfo=timezone.utc)  # 2 days
@@ -94,6 +100,74 @@ def test_collect_events_dedupes_identical_schedules(monkeypatch: pytest.MonkeyPa
     # 3 DAGs, but only 2 distinct schedules -> expanded twice, not thrice.
     assert len(expanded) == 2
     assert len(events) == 47 + 47 + 1  # a + b reuse the same 47 times; c has 1
+
+
+# endregion
+
+# region group_runs (weighted)
+
+
+def test_group_runs_dedupes_schedule_and_sums_weights() -> None:
+    dags = [
+        ScheduledDag("a", task_count=2, timetable=_hourly(), team="alpha"),
+        ScheduledDag("b", task_count=3, timetable=_hourly(), team="alpha"),  # same schedule + team
+    ]
+    groups = list(group_runs(dags, window_start=WINDOW_START, window_end=WINDOW_END))
+    assert len(groups) == 1
+    times, team, dag_count, task_sum = groups[0]
+    assert (team, dag_count, task_sum) == ("alpha", 2, 5)
+    assert len(times) == 47  # the shared hourly schedule expanded once
+
+
+def test_group_runs_splits_by_team() -> None:
+    dags = [
+        ScheduledDag("a", 1, _hourly(), "alpha"),
+        ScheduledDag("b", 1, _hourly(), "beta"),  # same schedule, different team -> separate groups
+    ]
+    groups = list(group_runs(dags, window_start=WINDOW_START, window_end=WINDOW_END))
+    assert len(groups) == 2
+    assert {team for _times, team, _d, _s in groups} == {"alpha", "beta"}
+
+
+def test_group_runs_shared_cache_expands_each_schedule_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    import schedule_visualizer.airflow_io.adapter as ad
+
+    calls: list[object] = []
+    real_iter = ad.iter_runs
+
+    def spy(timetable, **kwargs):
+        calls.append(timetable)
+        return real_iter(timetable, **kwargs)
+
+    monkeypatch.setattr(ad, "iter_runs", spy)
+
+    all_dags = [ScheduledDag("a", 1, _hourly(), "alpha"), ScheduledDag("b", 1, _hourly(), "alpha")]
+    cache: dict = {}
+    # Two passes (as service does for active-only and all) sharing one cache.
+    list(ad.group_runs(all_dags[:1], window_start=WINDOW_START, window_end=WINDOW_END, run_times=cache))
+    list(ad.group_runs(all_dags, window_start=WINDOW_START, window_end=WINDOW_END, run_times=cache))
+    assert len(calls) == 1  # hourly schedule expanded once across both passes
+
+
+def test_group_runs_aggregate_matches_collect_events() -> None:
+    dags = [
+        ScheduledDag("a", 2, _hourly(), "alpha"),
+        ScheduledDag("b", 3, _hourly(), "alpha"),  # shares a's schedule
+        ScheduledDag("c", 5, CronDataIntervalTimetable("0 0 * * *", timezone="UTC"), "beta"),
+    ]
+    old = aggregate(
+        collect_events(dags, window_start=WINDOW_START, window_end=WINDOW_END),
+        window_start=WINDOW_START,
+        window_end=WINDOW_END,
+    )
+    new = ScheduleAggregate(WINDOW_START, WINDOW_END)
+    for times, team, dag_count, task_sum in group_runs(dags, window_start=WINDOW_START, window_end=WINDOW_END):
+        new.add_runs(times, team=team, dags=dag_count, tasks=task_sum)
+
+    assert new.view().day_series() == old.view().day_series()
+    assert new.view().minute_series() == old.view().minute_series()
+    assert new.view().by_week_minute == old.view().by_week_minute
+    assert new.teams == old.teams
 
 
 # endregion
