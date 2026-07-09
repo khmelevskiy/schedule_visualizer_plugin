@@ -40,13 +40,10 @@ schedule_visualizer = "schedule_visualizer.plugin:ScheduleVisualizerPlugin"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-# The built UI lives under static/ but is git-ignored (generated from frontend/).
-# Force it into BOTH sdist and wheel: `uv build` builds the wheel from the sdist,
-# so if the sdist omits static/ the published wheel ships with no UI. Build the
-# frontend (`make frontend-build`) before `uv build`.
-[tool.hatch.build]
-artifacts = ["src/schedule_visualizer/static/**/*"]
-
+# The built UI (src/schedule_visualizer/static/) is committed to the repo, so it
+# is packaged like any other source file — no artifacts override needed, and a
+# `pip install` straight from the git repo ships the UI without running Node.
+# Rebuild it (`make build`) and commit whenever the frontend changes.
 [tool.hatch.build.targets.wheel]
 packages = ["src/schedule_visualizer"]
 

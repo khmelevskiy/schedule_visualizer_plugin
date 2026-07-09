@@ -25,6 +25,10 @@ make pre-commit   # ruff, ruff-format, ty, gitleaks, yamllint
 Run `make smoke` after bumping Airflow — the metadata-DB model API is the most
 likely thing to drift between minors, and it's the one path unit tests can't cover.
 
+Touched the frontend? Run `make build` and commit the regenerated
+`src/schedule_visualizer/static/`. The bundle is committed (there is no build CI),
+so a forgotten rebuild ships a stale UI.
+
 ## Where things go (ports & adapters)
 
 - **Pure logic** (`core.py`, `suggest.py`, `cache.py`, `config.py`) — no Airflow,

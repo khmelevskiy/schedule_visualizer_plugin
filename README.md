@@ -71,7 +71,12 @@ make test           # pytest
 make smoke          # loader integration check against a throwaway Airflow metadb
 make pre-commit     # ruff, ty, gitleaks, yamllint
 make frontend-dev   # Vite dev server (pair with `make demo-api`)
+make build          # rebuild the UI + wheel
 ```
+
+The built UI bundle (`src/schedule_visualizer/static/`) is committed — there is no
+build step in CI, so after changing the frontend run `make build` and commit the
+regenerated `static/`. This keeps `pip install`-from-git shipping the UI.
 
 All time-of-day analysis (heatmap, slots, suggestions, generated crons) is in
 **UTC** — the zone timetables emit. Converting minute-of-day to a local zone is

@@ -172,8 +172,8 @@ cython_debug/
 node_modules/
 frontend/dist/
 
-# Built frontend bundle shipped in the wheel (generated from frontend/)
-src/schedule_visualizer/static/
-
 # TypeScript incremental build cache
 *.tsbuildinfo
+
+# NOTE: the built UI bundle (src/schedule_visualizer/static/) is intentionally
+# committed — a `pip install` from git must ship it, and there is no build CI.
