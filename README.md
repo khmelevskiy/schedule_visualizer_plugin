@@ -33,7 +33,8 @@ HTTP surface in `web/`:
 ```text
 schedule_visualizer/
   core.py          pure aggregation: events → day×hour + minute + week-minute histograms
-  suggest.py       pure: least-contended placement per cadence (5 min…weekly) + cron
+  suggest.py       pure: least-contended placement per cadence (5 min…monthly) + cron
+  assess.py        grade an existing cron 0–100 against the aggregated load
   cache.py         single-flight TTL cache (swap in Redis behind this interface)
   config.py        env-driven settings
   service.py       composition: loader → adapter → core → cache; window + logging
@@ -51,9 +52,11 @@ frontend/          React + Vite UI, built into schedule_visualizer/static/
   the day, hour and heatmap series; a minute histogram drives the per-minute slot
   table; a minute-of-week histogram feeds weekly suggestions. Tenancy is a filter
   (`view(teams)`), so one cached aggregate serves the global and per-team views.
-- **Suggestions** (`suggest.py`): for a chosen cadence (5/10/15/30 min, hourly,
-  daily, weekly) it finds the phase that adds the least load and returns a
-  ready-to-paste cron. The UI exposes it as a "Recommended schedule" picker.
+- **Suggestions** (`suggest.py`): for a chosen cadence (5/10/15/30 min,
+  1/2/4/6/12 h, daily, weekly, monthly) it finds the phase that adds the least
+  load and returns a ready-to-paste cron. The UI exposes it as a "Recommended
+  schedule" picker, next to a checker that grades any existing cron 0–100
+  against the same load (`assess.py`, `GET /api/assess`).
 - **Team attribution** is a pluggable resolver (default: a `team:<name>` tag; the
   platform injects a bundle-name resolver).
 - **Serving**: the app mounts on the existing api-server (no new port). The data
