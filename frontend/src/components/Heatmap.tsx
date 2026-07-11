@@ -19,8 +19,10 @@ interface Props {
 }
 
 export function Heatmap({ rows, hours, metric, shortDay, dayTitle, weekend, onHover, onLeave }: Props) {
-  const cell = 22;
-  const gap = 2;
+  // Compact cells: 31 window days must fit a laptop viewport without scrolling
+  // (31 rows x 15px ≈ 480px); same scale as the hour x minute heatmap.
+  const cell = 14;
+  const gap = 1;
   const labelW = 46;
   const topH = 16;
   const max = Math.max(1, ...rows.flatMap((r) => r.cells.map((c) => metricOf(c, metric))));
@@ -53,7 +55,7 @@ export function Heatmap({ rows, hours, metric, shortDay, dayTitle, weekend, onHo
                     y={y}
                     width={cell}
                     height={cell}
-                    rx={3}
+                    rx={2}
                     fill={heatColor(value / max)}
                     onMouseMove={(e) => onHover(`${dayTitle(row.date)}, ${String(h).padStart(2, "0")}:00 — ${value} ${metric}`, e)}
                     onMouseLeave={onLeave}

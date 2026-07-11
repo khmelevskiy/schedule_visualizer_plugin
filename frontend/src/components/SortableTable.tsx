@@ -66,7 +66,10 @@ export function SortableTable({ title, hint, colHeader, rows, metric }: Props) {
           </thead>
           <tbody>
             {sorted.map((row) => (
-              <tr key={row.key}>
+              // Values in the key force <tr> recreation when a toggle rescales
+              // every row: text-only patches can leave stale paint of the top
+              // row under the sticky header.
+              <tr key={`${row.key}|${row.dags}|${row.tasks}`}>
                 <td>{row.label}</td>
                 <td className="num" style={bold("dags")}>
                   {row.dags}
