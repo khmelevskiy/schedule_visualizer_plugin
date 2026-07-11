@@ -26,6 +26,8 @@ export interface HeatmapRow {
 export interface SuggestionOption extends Counts {
   label: string;
   cron: string;
+  /** How many times this slot fires within the window (divide sums by it for per-firing load). */
+  occurrences: number;
 }
 
 export interface CadenceSuggestions {
@@ -52,13 +54,39 @@ export interface Schedule {
   suggestions: CadenceSuggestions[];
 }
 
-// Relative path so it resolves under any mount prefix.
+export type Assessment =
+  | { valid: false }
+  | {
+      valid: true;
+      score: number; // 0 busiest .. 100 empty
+      peak: number;
+      peak_label: string;
+      average: number;
+      firings_per_week: number;
+    };
+
+function query(params: { teams: string[]; metric: Metric; includePaused: boolean }): URLSearchParams {
+  const q = new URLSearchParams();
+  q.set("metric", params.metric);
+  if (params.includePaused) q.set("include_paused", "true");
+  for (const team of params.teams) q.append("team", team);
+  return q;
+}
+
+// Relative paths so they resolve under any mount prefix.
 export async function fetchSchedule(params: { teams: string[]; metric: Metric; includePaused: boolean }): Promise<Schedule> {
-  const query = new URLSearchParams();
-  query.set("metric", params.metric);
-  if (params.includePaused) query.set("include_paused", "true");
-  for (const team of params.teams) query.append("team", team);
-  const res = await fetch(`api/schedule?${query.toString()}`);
+  const res = await fetch(`api/schedule?${query(params).toString()}`);
+  if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+  return res.json();
+}
+
+export async function fetchAssess(
+  cron: string,
+  params: { teams: string[]; metric: Metric; includePaused: boolean },
+): Promise<Assessment> {
+  const q = query(params);
+  q.set("cron", cron);
+  const res = await fetch(`api/assess?${q.toString()}`);
   if (!res.ok) throw new Error(`Request failed: ${res.status}`);
   return res.json();
 }

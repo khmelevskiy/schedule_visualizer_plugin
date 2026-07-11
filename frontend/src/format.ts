@@ -43,3 +43,10 @@ export const teamLabel = (team: string | null): string => team ?? "untagged";
 // Minute-of-day (0..1439) → "HH:MM".
 export const hhmm = (minute: number): string =>
   `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
+
+// Averages can be fractional: keep one decimal while it matters, drop it once
+// the integer part dominates ("0.3", "7.5", but "18" and "120").
+export function fmtNum(value: number): string {
+  if (Number.isInteger(value)) return String(value);
+  return value < 10 ? value.toFixed(1) : String(Math.round(value));
+}

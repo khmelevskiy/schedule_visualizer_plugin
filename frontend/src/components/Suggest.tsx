@@ -1,15 +1,17 @@
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import type { CadenceSuggestions, Metric, SuggestionOption } from "../api";
+import { fmtNum } from "../format";
 
 interface Props {
   suggestions: CadenceSuggestions[];
   metric: Metric;
   timezone: string;
-  windowDays: number;
+  cadence: string;
+  onCadence: (cadence: string) => void;
+  children?: ReactNode; // extra footer content (the cron checker)
 }
 
-export function Suggest({ suggestions, metric, timezone, windowDays }: Props) {
-  const [cadence, setCadence] = useState("daily");
+export function Suggest({ suggestions, metric, timezone, cadence, onCadence, children }: Props) {
   const [copied, setCopied] = useState<string | null>(null);
 
   useEffect(() => {
@@ -25,7 +27,9 @@ export function Suggest({ suggestions, metric, timezone, windowDays }: Props) {
     navigator.clipboard?.writeText(cron);
     setCopied(cron);
   };
-  const load = (o: SuggestionOption) => (metric === "tasks" ? o.tasks : o.dags);
+  // Per-firing average: the histogram sums the whole window, so divide by how
+  // many times the slot fires in it — "what's already running when I fire".
+  const load = (o: SuggestionOption) => (metric === "tasks" ? o.tasks : o.dags) / Math.max(1, o.occurrences);
 
   return (
     <div className="card wide">
@@ -35,7 +39,7 @@ export function Suggest({ suggestions, metric, timezone, windowDays }: Props) {
       </p>
       <div className="suggest-controls">
         <span className="control-label">Run</span>
-        <select value={current.cadence} onChange={(e) => setCadence(e.target.value)}>
+        <select value={current.cadence} onChange={(e) => onCadence(e.target.value)}>
           {suggestions.map((s) => (
             <option key={s.cadence} value={s.cadence}>
               {s.label}
@@ -50,7 +54,7 @@ export function Suggest({ suggestions, metric, timezone, windowDays }: Props) {
               <span className="when">{o.label}</span>
               {i === 0 && <span className="badge">best</span>}
               <span className="cost">
-                busiest minute: {load(o)} {metric} over {windowDays} days
+                {load(o) > 0 ? `worst firing overlaps ~${fmtNum(load(o))} ${metric}` : "nothing scheduled here"}
               </span>
             </div>
             <div className="cron">
@@ -60,6 +64,7 @@ export function Suggest({ suggestions, metric, timezone, windowDays }: Props) {
           </li>
         ))}
       </ul>
+      {children}
     </div>
   );
 }
