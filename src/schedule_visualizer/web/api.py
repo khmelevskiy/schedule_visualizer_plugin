@@ -31,7 +31,7 @@ from schedule_visualizer.cache import Cached, TtlCache
 from schedule_visualizer.config import Config
 from schedule_visualizer.core import Metric
 from schedule_visualizer.service import Aggregates, build_cache
-from schedule_visualizer.web.serialize import schedule_payload
+from schedule_visualizer.web.serialize import assess_payload, schedule_payload
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
@@ -77,6 +77,18 @@ def create_app(
         agg = cached.value.pick(include_paused=include_paused)
         picked = Cached(value=agg, computed_at=cached.computed_at, expires_at=cached.expires_at)
         return schedule_payload(picked, teams=team, metric=metric)
+
+    @app.get("/api/assess", dependencies=guarded)
+    def get_assess(
+        cron: str,
+        team: list[str] | None = Query(default=None),
+        metric: Metric = "tasks",
+        include_paused: bool = False,
+    ) -> dict[str, object]:
+        cached = schedule_cache.get()
+        agg = cached.value.pick(include_paused=include_paused)
+        view = agg.view(list(team) if team is not None else None)
+        return assess_payload(view, cron, metric=metric)
 
     @app.get("/api/healthz")
     def healthz() -> dict[str, str]:

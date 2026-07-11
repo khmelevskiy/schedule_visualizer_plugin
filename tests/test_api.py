@@ -81,7 +81,33 @@ def test_auth_dependency_guards_data_but_not_health() -> None:
 
     client = _client(auth_dependency=deny)
     assert client.get("/api/schedule").status_code == 401  # data is gated
+    assert client.get("/api/assess", params={"cron": "0 3 * * *"}).status_code == 401
     assert client.get("/api/healthz").status_code == 200  # liveness stays open
+
+
+def test_assess_grades_a_cron() -> None:
+    # alpha's 2 tasks fire Mon 09:00 — a cron hitting exactly that minute is the worst slot
+    body = _client().get("/api/assess", params={"cron": "0 9 * * 1", "team": "alpha"}).json()
+    assert body["valid"] is True
+    assert body["score"] == 0
+    assert body["peak"] == 2
+    assert body["peak_label"] == "Mon 09:00"
+
+
+def test_assess_empty_slot_scores_100() -> None:
+    body = _client().get("/api/assess", params={"cron": "30 4 * * *"}).json()
+    assert body == {
+        "valid": True,
+        "score": 100,
+        "peak": 0,
+        "peak_label": "Mon 04:30",
+        "average": 0,
+        "firings_per_week": 7,
+    }
+
+
+def test_assess_invalid_cron() -> None:
+    assert _client().get("/api/assess", params={"cron": "nope"}).json() == {"valid": False}
 
 
 if __name__ == "__main__":

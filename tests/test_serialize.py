@@ -61,9 +61,30 @@ def test_team_filter_narrows_totals() -> None:
 def test_suggestions_present_with_cron_and_load() -> None:
     p = _payload([_at(2, 9, 30, tasks=3)])
     cadences = [s["cadence"] for s in p["suggestions"]]
-    assert cadences == ["every_5", "every_10", "every_15", "every_30", "hourly", "daily", "weekly"]
+    assert cadences == [
+        "every_5",
+        "every_10",
+        "every_15",
+        "every_30",
+        "hourly",
+        "every_2h",
+        "every_4h",
+        "every_6h",
+        "every_12h",
+        "daily",
+        "weekly",
+        "monthly",
+    ]
     option = p["suggestions"][0]["options"][0]
-    assert set(option) == {"label", "cron", "dags", "tasks"}
+    assert set(option) == {"label", "cron", "occurrences", "dags", "tasks"}
+    assert option["occurrences"] == 7  # minute-of-day slots recur once per window day
+
+
+def test_weekly_suggestion_occurrences_count_the_weekday() -> None:
+    p = _payload([_at(2, 9, 30, tasks=3)])
+    weekly = next(s for s in p["suggestions"] if s["cadence"] == "weekly")
+    # 7-day window: every weekday falls exactly once
+    assert all(o["occurrences"] == 1 for o in weekly["options"])
 
 
 def test_days_and_slots_carry_both_metrics() -> None:

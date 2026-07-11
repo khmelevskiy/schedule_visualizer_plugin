@@ -9,6 +9,7 @@ key.
 
 from datetime import date
 
+from schedule_visualizer.assess import assess
 from schedule_visualizer.cache import Cached
 from schedule_visualizer.core import Counts, Metric, ScheduleAggregate, ScheduleView
 from schedule_visualizer.suggest import suggest
@@ -43,10 +44,43 @@ def _suggestions(view: ScheduleView, metric: Metric) -> list[dict[str, object]]:
         {
             "cadence": cs.cadence,
             "label": cs.label,
-            "options": [{"label": o.label, "cron": o.cron, **_counts(o.peak)} for o in cs.options],
+            "options": [
+                {"label": o.label, "cron": o.cron, "occurrences": o.occurrences, **_counts(o.peak)} for o in cs.options
+            ],
         }
         for cs in suggest(view, metric=metric)
     ]
+
+
+def assess_payload(view: ScheduleView, cron: str, *, metric: Metric) -> dict[str, object]:
+    """Grade ``cron`` against ``view``; ``{"valid": False}`` when unparseable.
+
+    Parameters
+    ----------
+    view : ScheduleView
+        Team-filtered projection to grade against.
+    cron : str
+        Five-field cron expression, UTC.
+    metric : {"dags", "tasks"}
+        Metric to grade on.
+
+    Returns
+    -------
+    dict[str, object]
+        ``valid``, and for valid crons: ``score`` (0 busiest .. 100 empty),
+        ``peak``, ``peak_label``, ``average``, ``firings_per_week``.
+    """
+    a = assess(view, cron, metric=metric)
+    if a is None:
+        return {"valid": False}
+    return {
+        "valid": True,
+        "score": a.score,
+        "peak": round(a.peak, 1),
+        "peak_label": a.peak_label,
+        "average": round(a.average, 1),
+        "firings_per_week": a.firings_per_week,
+    }
 
 
 def schedule_payload(
