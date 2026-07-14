@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from schedule_visualizer.assess import assess
+from schedule_visualizer.assess import assess, upcoming
 from schedule_visualizer.core import RunEvent, aggregate
 
 # A full week window so weekly minutes map 1:1 to weekdays.
@@ -107,6 +107,25 @@ def test_yearly_alias_outside_window_returns_none() -> None:
 
 def test_unknown_alias_returns_none() -> None:
     assert assess(_view([_at(1)]), "@reboot", metric="tasks") is None
+
+
+def test_upcoming_lists_the_next_firings() -> None:
+    start = datetime(2026, 6, 1, 2, 59, tzinfo=timezone.utc)
+    runs = upcoming("0 3 * * *", start=start)
+    assert runs == [datetime(2026, 6, day, 3, 0, tzinfo=timezone.utc) for day in range(1, 6)]
+
+
+def test_upcoming_honors_count_and_aliases() -> None:
+    start = datetime(2026, 6, 1, 5, 0, tzinfo=timezone.utc)
+    runs = upcoming("@daily", start=start, count=2)
+    assert runs == [datetime(2026, 6, 2, tzinfo=timezone.utc), datetime(2026, 6, 3, tzinfo=timezone.utc)]
+
+
+def test_upcoming_invalid_cron_returns_none() -> None:
+    start = datetime(2026, 6, 1, tzinfo=timezone.utc)
+    assert upcoming("nope", start=start) is None
+    assert upcoming("* * * *", start=start) is None
+    assert upcoming("@reboot", start=start) is None
 
 
 if __name__ == "__main__":

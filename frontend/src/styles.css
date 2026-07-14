@@ -495,16 +495,41 @@ th.num {
   font-size: 12px;
 }
 
-.cron-check .cron-help {
+.cron-check .cron-next {
+  position: relative;
   color: var(--muted);
-  font-size: 12px;
-  text-decoration: none;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  cursor: help;
   white-space: nowrap;
 }
 
-.cron-check .cron-help:hover {
-  color: var(--accent);
-  text-decoration: underline;
+.cron-check .cron-next:hover {
+  color: var(--text);
+}
+
+.cron-check .cron-next .cron-next-list {
+  display: none;
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  white-space: nowrap;
+  z-index: 10;
+}
+
+.cron-check .cron-next:hover .cron-next-list,
+.cron-check .cron-next:focus-within .cron-next-list {
+  display: flex;
 }
 
 .legend {

@@ -14,6 +14,18 @@ interface Props {
 // 0 = red (busiest), 100 = green (empty).
 const scoreColor = (score: number) => `hsl(${Math.round(score * 1.2)}, 65%, 42%)`;
 
+// meta.timezone is always a valid zone name (currently "UTC").
+const runLabel = (iso: string, timezone: string): string =>
+  new Intl.DateTimeFormat("en-GB", {
+    timeZone: timezone,
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(new Date(iso));
+
 export function CronCheck({ metric, teams, includePaused, timezone, cron, onCron }: Props) {
   const [result, setResult] = useState<Assessment | null>(null);
   const isAlias = cron.trim().startsWith("@");
@@ -47,14 +59,6 @@ export function CronCheck({ metric, teams, includePaused, timezone, cron, onCron
         placeholder={`e.g. 0 3 * * * (${timezone})`}
         spellCheck={false}
       />
-      <a
-        className="cron-help"
-        href={cron.trim() && !isAlias ? `https://crontab.guru/#${cron.trim().replace(/ /g, "_")}` : "https://crontab.guru"}
-        target="_blank"
-        rel="noreferrer"
-      >
-        explain on crontab.guru ↗
-      </a>
       {isAlias && (
         <span className="cron-alias-hint">
           @-aliases fire at midnight / on the hour, right where load piles up — prefer an explicit cron with an offset
@@ -71,6 +75,16 @@ export function CronCheck({ metric, teams, includePaused, timezone, cron, onCron
             : "every firing lands on a free minute"}
           {" · fires "}
           {fmtNum(result.firings_per_week)}×/week
+          {result.next_runs.length > 0 && (
+            <span className="cron-next" tabIndex={0}>
+              next runs
+              <span className="cron-next-list" role="tooltip">
+                {result.next_runs.map((iso) => (
+                  <span key={iso}>{runLabel(iso, timezone)}</span>
+                ))}
+              </span>
+            </span>
+          )}
         </span>
       )}
     </div>

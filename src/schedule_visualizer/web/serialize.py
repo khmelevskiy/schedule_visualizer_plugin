@@ -7,9 +7,9 @@ metric without a round-trip. ``metric`` is echoed as the client's default sort
 key.
 """
 
-from datetime import date
+from datetime import date, datetime
 
-from schedule_visualizer.assess import assess
+from schedule_visualizer.assess import assess, upcoming
 from schedule_visualizer.cache import Cached
 from schedule_visualizer.core import Counts, Metric, ScheduleAggregate, ScheduleView
 from schedule_visualizer.suggest import suggest
@@ -52,7 +52,7 @@ def _suggestions(view: ScheduleView, metric: Metric) -> list[dict[str, object]]:
     ]
 
 
-def assess_payload(view: ScheduleView, cron: str, *, metric: Metric) -> dict[str, object]:
+def assess_payload(view: ScheduleView, cron: str, *, metric: Metric, now: datetime) -> dict[str, object]:
     """Grade ``cron`` against ``view``; ``{"valid": False}`` when unparseable.
 
     Parameters
@@ -63,12 +63,15 @@ def assess_payload(view: ScheduleView, cron: str, *, metric: Metric) -> dict[str
         Five-field cron expression, UTC.
     metric : {"dags", "tasks"}
         Metric to grade on.
+    now : datetime
+        Instant the upcoming firings are listed from (timezone-aware, UTC).
 
     Returns
     -------
     dict[str, object]
         ``valid``, and for valid crons: ``score`` (0 busiest .. 100 empty),
-        ``peak``, ``peak_label``, ``average``, ``firings_per_week``.
+        ``peak``, ``peak_label``, ``average``, ``firings_per_week``,
+        ``next_runs`` (ISO instants of the next five firings).
     """
     a = assess(view, cron, metric=metric)
     if a is None:
@@ -80,6 +83,7 @@ def assess_payload(view: ScheduleView, cron: str, *, metric: Metric) -> dict[str
         "peak_label": a.peak_label,
         "average": round(a.average, 1),
         "firings_per_week": a.firings_per_week,
+        "next_runs": [run.isoformat() for run in upcoming(cron, start=now) or []],
     }
 
 

@@ -96,6 +96,8 @@ def test_assess_grades_a_cron() -> None:
 
 def test_assess_empty_slot_scores_100() -> None:
     body = _client().get("/api/assess", params={"cron": "30 4 * * *"}).json()
+    next_runs = body.pop("next_runs")
+    assert len(next_runs) == 5
     assert body == {
         "valid": True,
         "score": 100,
@@ -104,6 +106,16 @@ def test_assess_empty_slot_scores_100() -> None:
         "average": 0,
         "firings_per_week": 7,
     }
+
+
+def test_assess_reports_upcoming_runs_from_now() -> None:
+    before = datetime.now(timezone.utc)
+    body = _client().get("/api/assess", params={"cron": "30 4 * * *"}).json()
+    runs = [datetime.fromisoformat(r) for r in body["next_runs"]]
+    assert len(runs) == 5
+    assert runs == sorted(runs)
+    assert all(r.tzinfo is not None and r > before for r in runs)
+    assert all((r.hour, r.minute) == (4, 30) for r in runs)
 
 
 def test_assess_invalid_cron() -> None:

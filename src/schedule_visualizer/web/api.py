@@ -21,6 +21,7 @@ api-server.
 """
 
 from collections.abc import Callable
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, Query
@@ -88,7 +89,7 @@ def create_app(
         cached = schedule_cache.get()
         agg = cached.value.pick(include_paused=include_paused)
         view = agg.view(list(team) if team is not None else None)
-        return assess_payload(view, cron, metric=metric)
+        return assess_payload(view, cron, metric=metric, now=datetime.now(timezone.utc))
 
     @app.get("/api/healthz")
     def healthz() -> dict[str, str]:

@@ -63,6 +63,8 @@ export type Assessment =
       peak_label: string;
       average: number;
       firings_per_week: number;
+      /** ISO instants of the next five firings, from "now". */
+      next_runs: string[];
     };
 
 function query(params: { teams: string[]; metric: Metric; includePaused: boolean }): URLSearchParams {

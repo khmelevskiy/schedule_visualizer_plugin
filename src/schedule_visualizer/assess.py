@@ -61,17 +61,47 @@ class Assessment:
     firings_per_week: float
 
 
+def _weekly_periodic(cron: str) -> bool | None:
+    """Whether one week of firings covers ``cron``'s pattern; ``None`` if invalid."""
+    if cron.startswith("@"):
+        return _ALIAS_WEEKLY_PERIODIC.get(cron)
+    fields = cron.split()
+    if len(fields) != 5 or not croniter.is_valid(cron):
+        return None
+    return fields[2] == "*" and fields[3] == "*"
+
+
+def upcoming(cron: str, *, start: datetime, count: int = 5) -> list[datetime] | None:
+    """List the next ``count`` firings of ``cron`` strictly after ``start``.
+
+    Parameters
+    ----------
+    cron : str
+        Five-field cron expression or an ``@``-alias, same dialect as
+        :func:`assess`.
+    start : datetime
+        Instant to iterate from (timezone-aware).
+    count : int
+        How many firings to list.
+
+    Returns
+    -------
+    list[datetime] | None
+        Firing instants in ``start``'s timezone; ``None`` when ``cron`` is
+        invalid.
+    """
+    cron = cron.strip()
+    if _weekly_periodic(cron) is None:
+        return None
+    it = croniter(cron, start)
+    return [it.get_next(datetime) for _ in range(count)]
+
+
 def _firing_week_minutes(view: ScheduleView, cron: str) -> tuple[set[int], bool] | None:
     """Expand ``cron`` to ``(minutes-of-week, weekly_periodic)``; ``None`` if invalid."""
-    if cron.startswith("@"):
-        if cron not in _ALIAS_WEEKLY_PERIODIC:
-            return None
-        weekly_periodic = _ALIAS_WEEKLY_PERIODIC[cron]
-    else:
-        fields = cron.split()
-        if len(fields) != 5 or not croniter.is_valid(cron):
-            return None
-        weekly_periodic = fields[2] == "*" and fields[3] == "*"
+    weekly_periodic = _weekly_periodic(cron)
+    if weekly_periodic is None:
+        return None
     horizon = view.window_start + timedelta(days=7) if weekly_periodic else view.window_end
     minutes: set[int] = set()
     it = croniter(cron, view.window_start - timedelta(minutes=1))
