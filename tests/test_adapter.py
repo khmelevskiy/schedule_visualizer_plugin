@@ -1,9 +1,11 @@
 from datetime import datetime, timezone
 
+import pendulum
 import pytest
 
 pytest.importorskip("airflow")  # adapter tests need Airflow installed
 
+from airflow.timetables.base import TimeRestriction  # noqa: E402
 from airflow.timetables.interval import CronDataIntervalTimetable  # noqa: E402
 from airflow.timetables.trigger import CronTriggerTimetable  # noqa: E402
 
@@ -22,6 +24,22 @@ WINDOW_END = datetime(2026, 6, 3, tzinfo=timezone.utc)  # 2 days
 
 def _hourly() -> CronDataIntervalTimetable:
     return CronDataIntervalTimetable("0 * * * *", timezone="UTC")
+
+
+def _airflow_runs(timetable, start: datetime, end: datetime) -> list[datetime]:
+    """Reference expansion through Airflow's timetable API."""
+    earliest = pendulum.instance(start)
+    latest = pendulum.instance(end)
+    restriction = TimeRestriction(earliest=earliest, latest=latest, catchup=True)
+    last_interval = None
+    runs: list[datetime] = []
+    while True:
+        info = timetable.next_dagrun_info(last_automated_data_interval=last_interval, restriction=restriction)
+        if info is None or info.run_after >= latest:
+            return runs
+        if info.run_after >= earliest:
+            runs.append(info.run_after)
+        last_interval = info.data_interval
 
 
 # region iter_runs
@@ -51,6 +69,71 @@ def test_iter_runs_trigger_timetable_supported() -> None:
     tt = CronTriggerTimetable("0 0 * * *", timezone="UTC")
     runs = list(iter_runs(tt, window_start=WINDOW_START, window_end=WINDOW_END))
     assert len(runs) == 2  # daily over 2 days
+
+
+@pytest.mark.parametrize(
+    ("timetable", "expected_count"),
+    [
+        (CronTriggerTimetable("*/5 * * * *", timezone="UTC"), 24),
+        (CronDataIntervalTimetable("*/5 * * * *", timezone="UTC"), 23),
+    ],
+)
+def test_iter_runs_expands_standard_utc_cron_without_airflow_per_run(
+    timetable, expected_count: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The common cron path must not pay Airflow/croniter cost per firing."""
+
+    def unexpected_airflow_expansion(*_args, **_kwargs):
+        raise AssertionError("standard UTC cron should use the analytical fast path")
+
+    monkeypatch.setattr(type(timetable), "next_dagrun_info", unexpected_airflow_expansion)
+    end = WINDOW_START.replace(hour=2)
+
+    runs = list(iter_runs(timetable, window_start=WINDOW_START, window_end=end))
+
+    assert len(runs) == expected_count
+    assert runs == sorted(runs)
+    assert all(WINDOW_START <= run < end for run in runs)
+
+
+@pytest.mark.parametrize("timetable_type", [CronTriggerTimetable, CronDataIntervalTimetable])
+@pytest.mark.parametrize(
+    "expression",
+    [
+        "0 * * * *",
+        "15 2 * * 1-5",
+        "0 0 1 * *",
+        "0 0 * * 0",
+        "0 0 1 * 1",
+        "0,15,30,45 8-18/2 * * 1-5",
+    ],
+)
+def test_iter_runs_fast_path_matches_airflow(timetable_type, expression: str) -> None:
+    end = datetime(2026, 7, 5, tzinfo=timezone.utc)
+
+    actual = list(iter_runs(timetable_type(expression, timezone="UTC"), window_start=WINDOW_START, window_end=end))
+    expected = _airflow_runs(timetable_type(expression, timezone="UTC"), WINDOW_START, end)
+
+    assert actual == expected
+
+
+def test_iter_runs_custom_cron_subclass_uses_airflow_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    class CustomCronTimetable(CronTriggerTimetable):
+        pass
+
+    calls = 0
+    original = CronTriggerTimetable.next_dagrun_info
+
+    def spy(self, **kwargs):
+        nonlocal calls
+        calls += 1
+        return original(self, **kwargs)
+
+    monkeypatch.setattr(CustomCronTimetable, "next_dagrun_info", spy)
+
+    list(iter_runs(CustomCronTimetable("0 * * * *", timezone="UTC"), window_start=WINDOW_START, window_end=WINDOW_END))
+
+    assert calls > 0
 
 
 # endregion

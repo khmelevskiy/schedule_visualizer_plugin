@@ -62,15 +62,17 @@ export function App() {
   }, [tab, metric, aggregation, includePaused, selected, heatRes, hourRes, cadence, cron]);
 
   useEffect(() => {
-    let live = true;
+    const controller = new AbortController();
     setError(null);
-    fetchSchedule({ teams: selected, metric, includePaused })
-      .then((d) => live && setData(d))
-      .catch((e) => live && setError(String(e)));
-    return () => {
-      live = false;
-    };
-  }, [metric, selected, includePaused]);
+    // Counts and suggestions for both metrics arrive together. Metric toggles
+    // are therefore pure client-side state and never wait on the network.
+    fetchSchedule({ teams: selected, metric: "tasks", includePaused }, controller.signal)
+      .then(setData)
+      .catch((e: unknown) => {
+        if ((e as { name?: string }).name !== "AbortError") setError(String(e));
+      });
+    return () => controller.abort();
+  }, [selected, includePaused]);
 
   const toggleTeam = (team: string) =>
     setSelected((cur) => (cur.includes(team) ? cur.filter((t) => t !== team) : [...cur, team]));
@@ -106,6 +108,28 @@ export function App() {
     () => data?.slots.map((s) => scale(metricOf(s, metric))) ?? [],
     [data, metric, aggregation],
   );
+  const dayRows = useMemo(
+    () =>
+      data?.days.map((day, index) => ({
+        key: day.date,
+        label: dayLabel(day.date),
+        order: index,
+        dags: day.dags,
+        tasks: day.tasks,
+      })) ?? [],
+    [data],
+  );
+  const slotRows = useMemo(
+    () =>
+      data?.slots.map((slot) => ({
+        key: slot.label,
+        label: slot.label,
+        order: slot.minute,
+        dags: aggregation === "avg" ? Math.round((slot.dags / windowDays) * 10) / 10 : slot.dags,
+        tasks: aggregation === "avg" ? Math.round((slot.tasks / windowDays) * 10) / 10 : slot.tasks,
+      })) ?? [],
+    [data, aggregation, windowDays],
+  );
 
   if (error) return <div className="app"><div className="state">Failed to load: {error}</div></div>;
   if (!data) return <div className="app"><div className="state">Loading…</div></div>;
@@ -139,7 +163,7 @@ export function App() {
       />
 
       <Suggest
-        suggestions={data.suggestions}
+        suggestions={data.suggestions_by_metric[metric]}
         metric={metric}
         timezone={data.meta.timezone}
         cadence={cadence}
@@ -253,7 +277,7 @@ export function App() {
             hint="Every day — quietest first. Actual per-day totals, so the Avg/Sum toggle does not apply here. Click a header to re-sort."
             colHeader="Day"
             metric={metric}
-            rows={data.days.map((d, i) => ({ key: d.date, label: dayLabel(d.date), order: i, dags: d.dags, tasks: d.tasks }))}
+            rows={dayRows}
           />
           <SortableTable
             title="Time slots"
@@ -262,13 +286,7 @@ export function App() {
             } — quietest first. Click a header to re-sort.`}
             colHeader="Time"
             metric={metric}
-            rows={data.slots.map((s) => ({
-              key: s.label,
-              label: s.label,
-              order: s.minute,
-              dags: scale(s.dags),
-              tasks: scale(s.tasks),
-            }))}
+            rows={slotRows}
           />
         </div>
       )}

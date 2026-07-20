@@ -13,16 +13,118 @@ so no run history is needed.
 import json
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, time, timedelta, timezone
+from typing import Any
 
 import pendulum
 from airflow.timetables.base import TimeRestriction, Timetable
+from airflow.timetables.interval import CronDataIntervalTimetable
+from airflow.timetables.trigger import CronTriggerTimetable
+from croniter import croniter
 
 from schedule_visualizer.core import RunEvent
 
 # Safety bound on timetable expansion per DAG, so a sub-minute schedule over a
 # month-wide window can't spin forever. A minutely DAG over ~35 days is ~50k.
 DEFAULT_RUN_CAP = 200_000
+
+
+@dataclass(frozen=True, slots=True)
+class _CronFields:
+    minutes: tuple[int, ...]
+    hours: tuple[int, ...]
+    days: tuple[int, ...] | None
+    months: tuple[int, ...] | None
+    weekdays: tuple[int, ...] | None
+    day_or: bool
+    skip_first: bool
+
+
+def _values(field: list[Any]) -> tuple[int, ...] | None:
+    """Return a simple numeric cron field, ``None`` for wildcard, or raise."""
+    if field == ["*"]:
+        return None
+    if not all(type(value) is int for value in field):
+        raise ValueError("advanced cron field")
+    return tuple(field)
+
+
+def _fast_cron_fields(timetable: Timetable, start: datetime) -> _CronFields | None:
+    """Describe cron schedules safe for analytical UTC expansion.
+
+    Airflow remains the correctness fallback for custom timetables, non-UTC
+    schedules (where DST matters), trigger intervals/run-immediately behavior,
+    and croniter's special ``L``/``#`` forms.
+    """
+    # Exact built-ins only: a subclass may override Airflow's scheduling
+    # semantics even if its serialized cron fields look ordinary.
+    if type(timetable) not in (CronTriggerTimetable, CronDataIntervalTimetable):
+        return None
+    try:
+        payload = timetable.serialize()
+        if str(payload.get("timezone")) != "UTC":
+            return None
+        if isinstance(timetable, CronTriggerTimetable) and (
+            payload.get("interval", 0.0) != 0.0 or payload.get("run_immediately", False)
+        ):
+            return None
+        parsed = croniter(str(payload["expression"]), start)
+        expanded = parsed.expanded
+        if len(expanded) != 5 or parsed.nth_weekday_of_month:
+            return None
+        minutes, hours, days, months, weekdays = (_values(field) for field in expanded)
+        return _CronFields(
+            minutes=tuple(range(60)) if minutes is None else minutes,
+            hours=tuple(range(24)) if hours is None else hours,
+            days=days,
+            months=months,
+            weekdays=weekdays,
+            day_or=parsed._day_or,
+            skip_first=isinstance(timetable, CronDataIntervalTimetable),
+        )
+    except KeyError, TypeError, ValueError:
+        return None
+
+
+def _day_matches(day: datetime, fields: _CronFields) -> bool:
+    if fields.months is not None and day.month not in fields.months:
+        return False
+    day_of_month = fields.days is None or day.day in fields.days
+    # cron: Sunday=0; datetime: Monday=0.
+    day_of_week = fields.weekdays is None or (day.weekday() + 1) % 7 in fields.weekdays
+    if fields.days is not None and fields.weekdays is not None:
+        return day_of_month or day_of_week if fields.day_or else day_of_month and day_of_week
+    return day_of_month and day_of_week
+
+
+def _iter_standard_utc_cron(
+    fields: _CronFields, *, window_start: datetime, window_end: datetime, cap: int
+) -> Iterator[datetime]:
+    start = window_start.astimezone(timezone.utc)
+    end = window_end.astimezone(timezone.utc)
+    day = datetime.combine(start.date(), time.min, tzinfo=timezone.utc)
+    emitted = 0
+    skipped_first = False
+    while day < end and emitted < cap:
+        if _day_matches(day, fields):
+            for hour in fields.hours:
+                for minute in fields.minutes:
+                    when = day.replace(hour=hour, minute=minute)
+                    if when < start or when >= end:
+                        continue
+                    # A data-interval run fires at the *end* of its interval.
+                    # Airflow's earliest restriction applies to the interval
+                    # start, so the first cron boundary in the window starts an
+                    # interval but does not itself produce a run.
+                    if fields.skip_first and not skipped_first:
+                        skipped_first = True
+                        continue
+                    if when < end:
+                        yield when
+                        emitted += 1
+                        if emitted >= cap:
+                            return
+        day += timedelta(days=1)
 
 
 @dataclass(frozen=True, slots=True)
@@ -92,6 +194,16 @@ def iter_runs(
     >>> len(list(iter_runs(tt, window_start=start, window_end=end)))
     2
     """
+    fast_fields = _fast_cron_fields(timetable, window_start)
+    if fast_fields is not None:
+        yield from _iter_standard_utc_cron(
+            fast_fields,
+            window_start=window_start,
+            window_end=window_end,
+            cap=cap,
+        )
+        return
+
     # Airflow timetables operate on pendulum datetimes (they call .in_timezone).
     earliest = pendulum.instance(window_start)
     latest = pendulum.instance(window_end)

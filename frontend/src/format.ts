@@ -50,3 +50,25 @@ export function fmtNum(value: number): string {
   if (Number.isInteger(value)) return String(value);
   return value < 10 ? value.toFixed(1) : String(Math.round(value));
 }
+
+// Compact axis labels keep large sums inside the SVG gutter (35.3k, 1.2M)
+// while tooltips and tables continue to show their useful exact values.
+export function fmtAxis(value: number): string {
+  const absolute = Math.abs(value);
+  const units: [number, string][] = [
+    [1_000_000_000, "B"],
+    [1_000_000, "M"],
+    [1_000, "k"],
+  ];
+  for (const [divisor, suffix] of units) {
+    if (absolute >= divisor) {
+      const scaled = value / divisor;
+      return `${Math.abs(scaled) < 10 ? scaled.toFixed(1).replace(/\.0$/, "") : Math.round(scaled)}${suffix}`;
+    }
+  }
+  return fmtNum(value);
+}
+
+export function axisGutter(labels: string[]): number {
+  return Math.max(34, Math.min(72, Math.max(...labels.map((label) => label.length), 1) * 6 + 10));
+}

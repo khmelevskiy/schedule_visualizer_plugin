@@ -1,4 +1,4 @@
-import { hhmm } from "../format";
+import { axisGutter, fmtAxis, hhmm } from "../format";
 
 interface Cursor {
   clientX: number;
@@ -15,34 +15,35 @@ interface Props {
 // viewBox coordinates; the SVG scales uniformly to the card width.
 const W = 960;
 const H = 220;
-const PAD = { top: 12, right: 8, bottom: 22, left: 34 };
 
 export function LineChart({ points, unit, onHover, onLeave }: Props) {
-  const plotW = W - PAD.left - PAD.right;
-  const plotH = H - PAD.top - PAD.bottom;
   const last = points.length - 1;
   const max = Math.max(1, ...points);
   const ticks = [0, 0.5, 1].map((t) => Math.round(max * t));
-  const baseline = PAD.top + plotH;
+  const tickLabels = ticks.map(fmtAxis);
+  const pad = { top: 12, right: 8, bottom: 22, left: axisGutter(tickLabels) };
+  const plotW = W - pad.left - pad.right;
+  const plotH = H - pad.top - pad.bottom;
+  const baseline = pad.top + plotH;
 
-  const x = (minute: number) => PAD.left + (minute / points.length) * plotW;
-  const y = (value: number) => PAD.top + plotH - (value / max) * plotH;
+  const x = (minute: number) => pad.left + (minute / points.length) * plotW;
+  const y = (value: number) => pad.top + plotH - (value / max) * plotH;
 
   // One point per minute — even at sub-pixel spacing the polyline reads as a
   // continuous curve, so the fine structure (spikes at :00/:15/:30) stays visible.
   const line = points.map((v, m) => `${x(m).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
-  const area = `${PAD.left},${baseline} ${line} ${x(last).toFixed(1)},${baseline}`;
+  const area = `${pad.left},${baseline} ${line} ${x(last).toFixed(1)},${baseline}`;
 
   return (
     <div className="chart-scroll">
       <svg className="line-svg" viewBox={`0 0 ${W} ${H}`} role="img" style={{ width: "100%", height: "auto" }}>
-        {ticks.map((t) => {
+        {ticks.map((t, index) => {
           const gy = y(t);
           return (
             <g key={t}>
-              <line x1={PAD.left} y1={gy} x2={W - PAD.right} y2={gy} stroke="var(--grid)" />
-              <text x={PAD.left - 6} y={gy + 3} textAnchor="end">
-                {t}
+              <line x1={pad.left} y1={gy} x2={W - pad.right} y2={gy} stroke="var(--grid)" />
+              <text x={pad.left - 6} y={gy + 3} textAnchor="end">
+                {tickLabels[index]}
               </text>
             </g>
           );
@@ -55,8 +56,8 @@ export function LineChart({ points, unit, onHover, onLeave }: Props) {
         <polygon points={area} fill="var(--accent)" fillOpacity={0.14} />
         <polyline points={line} fill="none" stroke="var(--accent)" strokeWidth={1.5} />
         <rect
-          x={PAD.left}
-          y={PAD.top}
+          x={pad.left}
+          y={pad.top}
           width={plotW}
           height={plotH}
           fill="transparent"

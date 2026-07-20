@@ -264,6 +264,73 @@ body {
 .table-scroll {
   max-height: 340px;
   overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.virtual-table {
+  width: 100%;
+  font-variant-numeric: tabular-nums;
+}
+
+.virtual-table-head,
+.virtual-table-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(72px, 0.55fr) minmax(72px, 0.55fr);
+  align-items: center;
+}
+
+.virtual-table-head {
+  border-bottom: 1px solid var(--border);
+}
+
+.virtual-table-head button {
+  appearance: none;
+  border: 0;
+  background: var(--surface);
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 550;
+  padding: 6px 8px;
+  text-align: left;
+}
+
+.virtual-table-head button.num {
+  text-align: right;
+}
+
+.virtual-table-head button:hover,
+.virtual-table-head button:focus-visible {
+  color: var(--text);
+}
+
+.virtual-table-spacer {
+  position: relative;
+}
+
+.virtual-table-row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 33px;
+  border-bottom: 1px solid var(--grid);
+}
+
+.virtual-table-row > span {
+  min-width: 0;
+  padding: 7px 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.virtual-table-row .num {
+  text-align: right;
+}
+
+.virtual-table-row .selected {
+  font-weight: 600;
 }
 
 table {
@@ -488,6 +555,28 @@ th.num {
   color: var(--muted);
   font-size: 12px;
   font-style: italic;
+}
+
+.cron-check .cron-status {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.cron-check .cron-error {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: hsl(0, 68%, 56%);
+  font-size: 12px;
+}
+
+.cron-check .cron-error button {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 3px 8px;
+  cursor: pointer;
 }
 
 .cron-check .cron-alias-hint {

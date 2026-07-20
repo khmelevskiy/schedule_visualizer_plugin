@@ -52,6 +52,7 @@ export interface Schedule {
   slots: SlotCounts[];
   heatmap: { hours: number[]; rows: HeatmapRow[] };
   suggestions: CadenceSuggestions[];
+  suggestions_by_metric: Record<Metric, CadenceSuggestions[]>;
 }
 
 export type Assessment =
@@ -76,8 +77,11 @@ function query(params: { teams: string[]; metric: Metric; includePaused: boolean
 }
 
 // Relative paths so they resolve under any mount prefix.
-export async function fetchSchedule(params: { teams: string[]; metric: Metric; includePaused: boolean }): Promise<Schedule> {
-  const res = await fetch(`api/schedule?${query(params).toString()}`);
+export async function fetchSchedule(
+  params: { teams: string[]; metric: Metric; includePaused: boolean },
+  signal?: AbortSignal,
+): Promise<Schedule> {
+  const res = await fetch(`api/schedule?${query(params).toString()}`, { signal });
   if (!res.ok) throw new Error(`Request failed: ${res.status}`);
   return res.json();
 }
@@ -85,10 +89,11 @@ export async function fetchSchedule(params: { teams: string[]; metric: Metric; i
 export async function fetchAssess(
   cron: string,
   params: { teams: string[]; metric: Metric; includePaused: boolean },
+  signal?: AbortSignal,
 ): Promise<Assessment> {
   const q = query(params);
   q.set("cron", cron);
-  const res = await fetch(`api/assess?${q.toString()}`);
+  const res = await fetch(`api/assess?${q.toString()}`, { signal });
   if (!res.ok) throw new Error(`Request failed: ${res.status}`);
   return res.json();
 }

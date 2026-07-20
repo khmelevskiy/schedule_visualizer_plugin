@@ -112,6 +112,7 @@ def schedule_payload(
     agg = cached.value
     selection: list[str | None] | None = list(teams) if teams is not None else None
     view = agg.view(selection)
+    suggestions_by_metric = {candidate: _suggestions(view, candidate) for candidate in ("dags", "tasks")}
     return {
         "window": {
             "start": view.window_start.isoformat(),
@@ -133,5 +134,8 @@ def schedule_payload(
         "hours": [{"hour": hour, **_counts(counts)} for hour, counts in view.hour_series()],
         "slots": _slots(view),
         "heatmap": _heatmap(view),
-        "suggestions": _suggestions(view, metric),
+        # Keep the legacy selected list for API compatibility. The complete
+        # mapping lets the UI switch metrics without another HTTP request.
+        "suggestions": suggestions_by_metric[metric],
+        "suggestions_by_metric": suggestions_by_metric,
     }

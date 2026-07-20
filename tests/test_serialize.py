@@ -98,6 +98,15 @@ def test_days_and_slots_carry_both_metrics() -> None:
     assert p["metric"] == "tasks"  # echoed default sort key
 
 
+def test_suggestions_carry_both_metrics_for_client_side_toggle() -> None:
+    # One DAG with many tasks makes the two rankings observably different.
+    events = [_at(2, 9, tasks=100), _at(2, 10, tasks=1), _at(2, 10, tasks=1)]
+    p = _payload(events, metric="tasks")
+
+    assert set(p["suggestions_by_metric"]) == {"dags", "tasks"}
+    assert p["suggestions"] == p["suggestions_by_metric"]["tasks"]
+
+
 if __name__ == "__main__":
     import sys
 

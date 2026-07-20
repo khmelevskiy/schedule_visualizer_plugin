@@ -27,35 +27,66 @@ const runLabel = (iso: string, timezone: string): string =>
   }).format(new Date(iso));
 
 export function CronCheck({ metric, teams, includePaused, timezone, cron, onCron }: Props) {
+  const [draft, setDraft] = useState(cron);
   const [result, setResult] = useState<Assessment | null>(null);
-  const isAlias = cron.trim().startsWith("@");
+  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [retry, setRetry] = useState(0);
+  const normalized = draft.trim();
+  const isAlias = normalized.startsWith("@");
+
+  const updateDraft = (value: string) => {
+    const nextNormalized = value.trim();
+    setDraft(value);
+    // A cosmetic trailing space is the same cron and keeps the current result.
+    // A real edit invalidates stale output immediately; only the request waits
+    // for the debounce below.
+    if (nextNormalized !== normalized) {
+      setResult(null);
+      setStatus(nextNormalized ? "loading" : "idle");
+    }
+  };
+
+  // The parent owns only the debounced/shareable URL value. Keystrokes stay
+  // local so typing here cannot rerender charts or the 1440-slot table.
+  useEffect(() => setDraft(cron), [cron]);
 
   // Debounced fetch: grade while typing without a request per keystroke.
   useEffect(() => {
-    const trimmed = cron.trim();
-    if (!trimmed) {
+    if (!normalized) {
       setResult(null);
+      setStatus("idle");
+      onCron("");
       return;
     }
-    let live = true;
+    const controller = new AbortController();
     const t = setTimeout(() => {
-      fetchAssess(trimmed, { teams, metric, includePaused })
-        .then((a) => live && setResult(a))
-        .catch(() => live && setResult(null));
+      onCron(normalized);
+      setStatus("loading");
+      setResult(null);
+      fetchAssess(normalized, { teams, metric, includePaused }, controller.signal)
+        .then((assessment) => {
+          setResult(assessment);
+          setStatus("success");
+        })
+        .catch((error: unknown) => {
+          if ((error as { name?: string }).name === "AbortError") return;
+          setResult(null);
+          setStatus("error");
+        });
     }, 350);
     return () => {
-      live = false;
       clearTimeout(t);
+      controller.abort();
     };
-  }, [cron, teams, metric, includePaused]);
+  }, [normalized, teams, metric, includePaused, retry, onCron]);
 
   return (
     <div className="cron-check">
       <span className="control-label">Check a cron</span>
       <input
         type="text"
-        value={cron}
-        onChange={(e) => onCron(e.target.value)}
+        value={draft}
+        onChange={(e) => updateDraft(e.target.value)}
         placeholder={`e.g. 0 3 * * * (${timezone})`}
         spellCheck={false}
       />
@@ -64,8 +95,25 @@ export function CronCheck({ metric, teams, includePaused, timezone, cron, onCron
           @-aliases fire at midnight / on the hour, right where load piles up — prefer an explicit cron with an offset
         </span>
       )}
-      {cron.trim() && result && !result.valid && <span className="cron-invalid">not a valid cron (or never fires in the window)</span>}
-      {cron.trim() && result?.valid && (
+      {normalized && status === "loading" && <span className="cron-status">checking…</span>}
+      {normalized && status === "error" && (
+        <span className="cron-error" role="alert">
+          check failed
+          <button
+            type="button"
+            onClick={() => {
+              setStatus("loading");
+              setRetry((value) => value + 1);
+            }}
+          >
+            retry
+          </button>
+        </span>
+      )}
+      {normalized && status === "success" && result && !result.valid && (
+        <span className="cron-invalid">not a valid cron (or never fires in the window)</span>
+      )}
+      {normalized && status === "success" && result?.valid && (
         <span className="cron-result">
           <span className="score" style={{ background: scoreColor(result.score) }}>
             {result.score}

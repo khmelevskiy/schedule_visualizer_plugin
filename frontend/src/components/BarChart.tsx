@@ -1,3 +1,5 @@
+import { axisGutter, fmtAxis } from "../format";
+
 export interface Bar {
   label: string;
   value: number;
@@ -21,23 +23,24 @@ interface Props {
 }
 
 export function BarChart({ bars, height = 200, barWidth = 22, labelEvery = 1, unit, onHover, onLeave }: Props) {
-  const pad = { top: 12, right: 8, bottom: 22, left: 34 };
   const gap = 6;
-  const plotH = height - pad.top - pad.bottom;
-  const width = pad.left + pad.right + bars.length * (barWidth + gap);
   const max = Math.max(1, ...bars.map((b) => b.value));
   const ticks = [0, 0.5, 1].map((t) => Math.round(max * t));
+  const tickLabels = ticks.map(fmtAxis);
+  const pad = { top: 12, right: 8, bottom: 22, left: axisGutter(tickLabels) };
+  const plotH = height - pad.top - pad.bottom;
+  const width = pad.left + pad.right + bars.length * (barWidth + gap);
 
   return (
     <div className="chart-scroll">
       <svg className="bar-svg" width={width} height={height} role="img">
-        {ticks.map((t) => {
+        {ticks.map((t, index) => {
           const y = pad.top + plotH - (t / max) * plotH;
           return (
             <g key={t}>
               <line x1={pad.left} y1={y} x2={width - pad.right} y2={y} stroke="var(--grid)" />
               <text x={pad.left - 6} y={y + 3} textAnchor="end">
-                {t}
+                {tickLabels[index]}
               </text>
             </g>
           );
