@@ -1,6 +1,6 @@
 import threading
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from schedule_visualizer.cache import TtlCache
 
@@ -29,7 +29,7 @@ def _counter():
 
 
 def test_computes_once_within_ttl() -> None:
-    clock = FakeClock(datetime(2026, 1, 1, tzinfo=timezone.utc))
+    clock = FakeClock(datetime(2026, 1, 1, tzinfo=UTC))
     compute, calls = _counter()
     cache = TtlCache(compute=compute, ttl=timedelta(hours=1), clock=clock)
 
@@ -40,7 +40,7 @@ def test_computes_once_within_ttl() -> None:
 
 
 def test_recomputes_after_ttl() -> None:
-    clock = FakeClock(datetime(2026, 1, 1, tzinfo=timezone.utc))
+    clock = FakeClock(datetime(2026, 1, 1, tzinfo=UTC))
     compute, calls = _counter()
     cache = TtlCache(compute=compute, ttl=timedelta(hours=1), clock=clock)
 
@@ -51,7 +51,7 @@ def test_recomputes_after_ttl() -> None:
 
 
 def test_invalidate_forces_recompute() -> None:
-    clock = FakeClock(datetime(2026, 1, 1, tzinfo=timezone.utc))
+    clock = FakeClock(datetime(2026, 1, 1, tzinfo=UTC))
     compute, _ = _counter()
     cache = TtlCache(compute=compute, ttl=timedelta(hours=1), clock=clock)
 
@@ -61,7 +61,7 @@ def test_invalidate_forces_recompute() -> None:
 
 
 def test_exposes_computed_and_expiry() -> None:
-    start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    start = datetime(2026, 1, 1, tzinfo=UTC)
     clock = FakeClock(start)
     compute, _ = _counter()
     cache = TtlCache(compute=compute, ttl=timedelta(hours=1), clock=clock)
@@ -72,7 +72,7 @@ def test_exposes_computed_and_expiry() -> None:
 
 
 def test_single_flight_under_concurrency() -> None:
-    clock = FakeClock(datetime(2026, 1, 1, tzinfo=timezone.utc))
+    clock = FakeClock(datetime(2026, 1, 1, tzinfo=UTC))
     calls = {"n": 0}
 
     def compute() -> int:

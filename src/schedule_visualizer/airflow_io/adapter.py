@@ -13,7 +13,7 @@ so no run history is needed.
 import json
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
-from datetime import datetime, time, timedelta, timezone
+from datetime import UTC, datetime, time, timedelta
 from typing import Any
 
 import pendulum
@@ -100,9 +100,9 @@ def _day_matches(day: datetime, fields: _CronFields) -> bool:
 def _iter_standard_utc_cron(
     fields: _CronFields, *, window_start: datetime, window_end: datetime, cap: int
 ) -> Iterator[datetime]:
-    start = window_start.astimezone(timezone.utc)
-    end = window_end.astimezone(timezone.utc)
-    day = datetime.combine(start.date(), time.min, tzinfo=timezone.utc)
+    start = window_start.astimezone(UTC)
+    end = window_end.astimezone(UTC)
+    day = datetime.combine(start.date(), time.min, tzinfo=UTC)
     emitted = 0
     skipped_first = False
     while day < end and emitted < cap:

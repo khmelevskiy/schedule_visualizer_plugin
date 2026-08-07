@@ -1,15 +1,15 @@
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 
 import pytest
 
 from schedule_visualizer.core import Counts, RunEvent, ScheduleAggregate, aggregate
 
-WINDOW_START = datetime(2026, 6, 1, tzinfo=timezone.utc)
-WINDOW_END = datetime(2026, 6, 8, tzinfo=timezone.utc)  # 7-day window
+WINDOW_START = datetime(2026, 6, 1, tzinfo=UTC)
+WINDOW_END = datetime(2026, 6, 8, tzinfo=UTC)  # 7-day window
 
 
 def _at(day: int, hour: int = 0, minute: int = 0, *, team: str | None = None, tasks: int = 1) -> RunEvent:
-    return RunEvent(datetime(2026, 6, day, hour, minute, tzinfo=timezone.utc), task_count=tasks, team=team)
+    return RunEvent(datetime(2026, 6, day, hour, minute, tzinfo=UTC), task_count=tasks, team=team)
 
 
 def _agg(events):
@@ -91,7 +91,7 @@ def test_minute_series_places_run_at_its_minute_of_day() -> None:
 
 
 def test_add_runs_weighted_equals_per_event() -> None:
-    times = [datetime(2026, 6, 2, 9, 0, tzinfo=timezone.utc), datetime(2026, 6, 3, 9, 0, tzinfo=timezone.utc)]
+    times = [datetime(2026, 6, 2, 9, 0, tzinfo=UTC), datetime(2026, 6, 3, 9, 0, tzinfo=UTC)]
     weighted = ScheduleAggregate(WINDOW_START, WINDOW_END)
     weighted.add_runs(times, team="a", dags=2, tasks=5)  # 2 DAGs sharing this schedule, 5 tasks total
     # Same load expressed one event per DAG per run (task counts 3 + 2 = 5).
@@ -111,15 +111,15 @@ def test_add_runs_weighted_equals_per_event() -> None:
 
 def test_add_runs_skips_runs_outside_window() -> None:
     agg = ScheduleAggregate(WINDOW_START, WINDOW_END)
-    inside = datetime(2026, 6, 2, tzinfo=timezone.utc)
-    outside = datetime(2026, 6, 30, tzinfo=timezone.utc)  # past window_end
+    inside = datetime(2026, 6, 2, tzinfo=UTC)
+    outside = datetime(2026, 6, 30, tzinfo=UTC)  # past window_end
     agg.add_runs([inside, outside], team=None, dags=1, tasks=4)
     assert sum(c.dags for _, c in agg.view().day_series()) == 1
 
 
 def test_add_runs_zero_dags_is_noop() -> None:
     agg = ScheduleAggregate(WINDOW_START, WINDOW_END)
-    agg.add_runs([datetime(2026, 6, 2, tzinfo=timezone.utc)], team="a", dags=0, tasks=0)
+    agg.add_runs([datetime(2026, 6, 2, tzinfo=UTC)], team="a", dags=0, tasks=0)
     assert agg.teams == []
     assert sum(c.dags for _, c in agg.view().day_series()) == 0
 

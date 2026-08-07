@@ -1,25 +1,25 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pendulum
 import pytest
 
 pytest.importorskip("airflow")  # adapter tests need Airflow installed
 
-from airflow.timetables.base import TimeRestriction  # noqa: E402
-from airflow.timetables.interval import CronDataIntervalTimetable  # noqa: E402
-from airflow.timetables.trigger import CronTriggerTimetable  # noqa: E402
+from airflow.timetables.base import TimeRestriction
+from airflow.timetables.interval import CronDataIntervalTimetable
+from airflow.timetables.trigger import CronTriggerTimetable
 
-from schedule_visualizer.airflow_io.adapter import (  # noqa: E402
+from schedule_visualizer.airflow_io.adapter import (
     ScheduledDag,
     collect_events,
     events_for,
     group_runs,
     iter_runs,
 )
-from schedule_visualizer.core import ScheduleAggregate, aggregate  # noqa: E402
+from schedule_visualizer.core import ScheduleAggregate, aggregate
 
-WINDOW_START = datetime(2026, 6, 1, tzinfo=timezone.utc)
-WINDOW_END = datetime(2026, 6, 3, tzinfo=timezone.utc)  # 2 days
+WINDOW_START = datetime(2026, 6, 1, tzinfo=UTC)
+WINDOW_END = datetime(2026, 6, 3, tzinfo=UTC)  # 2 days
 
 
 def _hourly() -> CronDataIntervalTimetable:
@@ -109,7 +109,7 @@ def test_iter_runs_expands_standard_utc_cron_without_airflow_per_run(
     ],
 )
 def test_iter_runs_fast_path_matches_airflow(timetable_type, expression: str) -> None:
-    end = datetime(2026, 7, 5, tzinfo=timezone.utc)
+    end = datetime(2026, 7, 5, tzinfo=UTC)
 
     actual = list(iter_runs(timetable_type(expression, timezone="UTC"), window_start=WINDOW_START, window_end=end))
     expected = _airflow_runs(timetable_type(expression, timezone="UTC"), WINDOW_START, end)

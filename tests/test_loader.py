@@ -4,18 +4,18 @@ import pytest
 
 pytest.importorskip("airflow")  # loader tests need Airflow installed
 
-from airflow.providers.standard.operators.empty import EmptyOperator  # noqa: E402
-from airflow.sdk import DAG  # noqa: E402
-from airflow.serialization.serialized_objects import DagSerialization  # noqa: E402
+from airflow.providers.standard.operators.empty import EmptyOperator
+from airflow.sdk import DAG
+from airflow.serialization.serialized_objects import DagSerialization
 
-from schedule_visualizer.airflow_io.loader import (  # noqa: E402
+from schedule_visualizer.airflow_io.loader import (
     DagMeta,
     _to_scheduled_dag,
     resolver_for,
     team_from_bundle,
     team_from_tag,
 )
-from schedule_visualizer.config import Config  # noqa: E402
+from schedule_visualizer.config import Config
 
 
 def _serialized(dag_id: str, *, schedule: str, tasks: int, tags: list[str]) -> dict:

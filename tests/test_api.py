@@ -1,24 +1,24 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
 pytest.importorskip("fastapi")
 
-from fastapi import HTTPException  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
+from fastapi import HTTPException
+from fastapi.testclient import TestClient
 
-from schedule_visualizer.cache import TtlCache  # noqa: E402
-from schedule_visualizer.config import Config  # noqa: E402
-from schedule_visualizer.core import RunEvent, aggregate  # noqa: E402
-from schedule_visualizer.service import Aggregates  # noqa: E402
-from schedule_visualizer.web.api import create_app  # noqa: E402
+from schedule_visualizer.cache import TtlCache
+from schedule_visualizer.config import Config
+from schedule_visualizer.core import RunEvent, aggregate
+from schedule_visualizer.service import Aggregates
+from schedule_visualizer.web.api import create_app
 
-WINDOW_START = datetime(2026, 6, 1, tzinfo=timezone.utc)
-WINDOW_END = datetime(2026, 6, 8, tzinfo=timezone.utc)
+WINDOW_START = datetime(2026, 6, 1, tzinfo=UTC)
+WINDOW_END = datetime(2026, 6, 8, tzinfo=UTC)
 
 
 def _at(day: int, hour: int = 0, *, team: str | None = None, tasks: int = 1) -> RunEvent:
-    return RunEvent(datetime(2026, 6, day, hour, tzinfo=timezone.utc), task_count=tasks, team=team)
+    return RunEvent(datetime(2026, 6, day, hour, tzinfo=UTC), task_count=tasks, team=team)
 
 
 def _agg(events):
@@ -28,7 +28,7 @@ def _agg(events):
 def _client(auth_dependency=None, paused_extra=None) -> TestClient:
     active_events = [_at(1, 9, team="alpha", tasks=2), _at(2, 10, team="beta", tasks=5)]
     aggregates = Aggregates(active=_agg(active_events), all=_agg(active_events + (paused_extra or [])))
-    clock = lambda: datetime(2026, 6, 1, tzinfo=timezone.utc)  # noqa: E731
+    clock = lambda: datetime(2026, 6, 1, tzinfo=UTC)  # noqa: E731
     cache = TtlCache(compute=lambda: aggregates, ttl=timedelta(hours=1), clock=clock)
     app = create_app(Config.from_env({}), cache=cache, auth_dependency=auth_dependency)
     return TestClient(app)
@@ -109,7 +109,7 @@ def test_assess_empty_slot_scores_100() -> None:
 
 
 def test_assess_reports_upcoming_runs_from_now() -> None:
-    before = datetime.now(timezone.utc)
+    before = datetime.now(UTC)
     body = _client().get("/api/assess", params={"cron": "30 4 * * *"}).json()
     runs = [datetime.fromisoformat(r) for r in body["next_runs"]]
     assert len(runs) == 5

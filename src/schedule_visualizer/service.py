@@ -11,7 +11,7 @@ import logging
 import time
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from schedule_visualizer.airflow_io.adapter import ScheduledDag, group_runs
 from schedule_visualizer.airflow_io.loader import TeamResolver, load_scheduled_dags
@@ -45,7 +45,7 @@ class Aggregates:
 
 def utc_now() -> datetime:
     """Current time as a timezone-aware UTC datetime."""
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def compute_window(now: datetime, window_days: int) -> tuple[datetime, datetime]:

@@ -1,17 +1,17 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from schedule_visualizer.cache import Cached
 from schedule_visualizer.core import RunEvent, aggregate
 from schedule_visualizer.web.serialize import schedule_payload
 
-WINDOW_START = datetime(2026, 6, 1, tzinfo=timezone.utc)
-WINDOW_END = datetime(2026, 6, 8, tzinfo=timezone.utc)  # 7 days
-COMPUTED_AT = datetime(2026, 6, 1, 6, 0, tzinfo=timezone.utc)
-EXPIRES_AT = datetime(2026, 6, 1, 7, 0, tzinfo=timezone.utc)
+WINDOW_START = datetime(2026, 6, 1, tzinfo=UTC)
+WINDOW_END = datetime(2026, 6, 8, tzinfo=UTC)  # 7 days
+COMPUTED_AT = datetime(2026, 6, 1, 6, 0, tzinfo=UTC)
+EXPIRES_AT = datetime(2026, 6, 1, 7, 0, tzinfo=UTC)
 
 
 def _at(day: int, hour: int = 0, minute: int = 0, *, team: str | None = None, tasks: int = 1) -> RunEvent:
-    return RunEvent(datetime(2026, 6, day, hour, minute, tzinfo=timezone.utc), task_count=tasks, team=team)
+    return RunEvent(datetime(2026, 6, day, hour, minute, tzinfo=UTC), task_count=tasks, team=team)
 
 
 def _cached(events) -> Cached:

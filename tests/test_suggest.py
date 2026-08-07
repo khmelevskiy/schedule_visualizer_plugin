@@ -1,15 +1,15 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from schedule_visualizer.core import RunEvent, aggregate
 from schedule_visualizer.suggest import suggest
 
 # A full week window so weekly suggestions have every weekday available.
-WINDOW_START = datetime(2026, 6, 1, tzinfo=timezone.utc)  # Monday
-WINDOW_END = datetime(2026, 6, 8, tzinfo=timezone.utc)
+WINDOW_START = datetime(2026, 6, 1, tzinfo=UTC)  # Monday
+WINDOW_END = datetime(2026, 6, 8, tzinfo=UTC)
 
 
 def _at(day: int, hour: int = 0, minute: int = 0, *, tasks: int = 1) -> RunEvent:
-    return RunEvent(datetime(2026, 6, day, hour, minute, tzinfo=timezone.utc), task_count=tasks, team=None)
+    return RunEvent(datetime(2026, 6, day, hour, minute, tzinfo=UTC), task_count=tasks, team=None)
 
 
 def _view(events):
@@ -115,8 +115,8 @@ def test_weekly_ranking_normalizes_by_weekday_occurrences() -> None:
     # 8-day window Mon..Mon: Monday falls twice, the rest once. A daily DAG at
     # 09:00 loads every day equally per firing — raw sums would make Monday
     # 09:00 look twice as busy as the other weekdays at equal real load.
-    start = datetime(2026, 6, 1, tzinfo=timezone.utc)  # Monday
-    end = datetime(2026, 6, 9, tzinfo=timezone.utc)
+    start = datetime(2026, 6, 1, tzinfo=UTC)  # Monday
+    end = datetime(2026, 6, 9, tzinfo=UTC)
     events = [_at(d, 9, 0, tasks=5) for d in range(1, 9)]
     view = aggregate(events, window_start=start, window_end=end).view()
     weekly = next(cs for cs in suggest(view, metric="tasks") if cs.cadence == "weekly")
