@@ -5,7 +5,7 @@ import pytest
 
 pytest.importorskip("airflow")  # adapter tests need Airflow installed
 
-from airflow.timetables.base import TimeRestriction
+from airflow.timetables.base import TimeRestriction, Timetable
 from airflow.timetables.interval import CronDataIntervalTimetable
 from airflow.timetables.trigger import CronTriggerTimetable
 
@@ -52,6 +52,38 @@ def test_iter_runs_hourly_count_and_bounds() -> None:
     assert len(runs) == 47
     assert all(WINDOW_START <= r < WINDOW_END for r in runs)
     assert runs == sorted(runs)
+
+
+@pytest.mark.parametrize("name", ["ContinuousTimetable", "OnceTimetable"])
+def test_iter_runs_skips_unplanned_timetables(name: str) -> None:
+    """Neither has a planned future time; expanding them draws phantom runs."""
+    import airflow.timetables.simple as simple
+
+    runs = list(iter_runs(getattr(simple, name)(), window_start=WINDOW_START, window_end=WINDOW_END))
+    assert runs == []
+
+
+def test_iter_runs_stops_when_time_does_not_advance() -> None:
+    """A timetable stuck on one instant must not fill the cap with it."""
+    from airflow.timetables.base import DagRunInfo
+
+    class _Stuck(Timetable):
+        def next_dagrun_info(self, *, last_automated_data_interval, restriction):
+            return DagRunInfo.exact(pendulum.instance(WINDOW_START))
+
+    runs = list(iter_runs(_Stuck(), window_start=WINDOW_START, window_end=WINDOW_END, cap=10_000))
+    assert runs == [WINDOW_START]
+
+
+def test_events_for_survives_a_broken_timetable() -> None:
+    """One failing DAG is skipped; the rest of the recompute still runs."""
+
+    class _Broken(Timetable):
+        def next_dagrun_info(self, *, last_automated_data_interval, restriction):
+            raise RuntimeError("boom")
+
+    dag = ScheduledDag(dag_id="broken", task_count=1, timetable=_Broken(), team=None)
+    assert list(events_for(dag, window_start=WINDOW_START, window_end=WINDOW_END)) == []
 
 
 def test_iter_runs_end_is_exclusive() -> None:

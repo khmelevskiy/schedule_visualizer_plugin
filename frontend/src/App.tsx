@@ -146,6 +146,7 @@ export function App() {
       </div>
       <p className="subtitle">
         Planned load across {data.days.length} days — find the quietest days and time slots to place new work.
+        DAGs with no planned time (asset-triggered, <code>@continuous</code>, <code>@once</code>) are not counted.
       </p>
 
       <Controls

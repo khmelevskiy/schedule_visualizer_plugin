@@ -57,6 +57,9 @@ frontend/          React + Vite UI, built into schedule_visualizer/static/
   load and returns a ready-to-paste cron. The UI exposes it as a "Recommended
   schedule" picker, next to a checker that grades any existing cron 0–100
   against the same load (`assess.py`, `GET /api/assess`).
+- **Not counted**: DAGs with no planned time — asset-triggered ones, `@continuous`
+  (fires on the previous run's completion) and `@once` (already fired; with no run
+  history Airflow would answer "at the window start" every single day).
 - **Team attribution** is a pluggable resolver (default: a `team:<name>` tag; the
   platform injects a bundle-name resolver).
 - **Serving**: the app mounts on the existing api-server (no new port). The data

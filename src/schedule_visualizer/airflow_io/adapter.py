@@ -11,6 +11,7 @@ so no run history is needed.
 """
 
 import json
+import logging
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from datetime import UTC, datetime, time, timedelta
@@ -24,9 +25,17 @@ from croniter import croniter
 
 from schedule_visualizer.core import RunEvent
 
+log = logging.getLogger(__name__)
+
 # Safety bound on timetable expansion per DAG, so a sub-minute schedule over a
 # month-wide window can't spin forever. A minutely DAG over ~35 days is ~50k.
 DEFAULT_RUN_CAP = 200_000
+
+# Timetables with no planned future times. `@continuous` fires when the previous
+# run ends; `@once` has already fired, but with no run history Airflow keeps
+# answering "at the window start", which would draw a run every single day.
+# Matched by name: the SDK and core class trees are distinct types.
+_UNPLANNED_TIMETABLES = frozenset({"ContinuousTimetable", "OnceTimetable"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,18 +121,17 @@ def _iter_standard_utc_cron(
                     when = day.replace(hour=hour, minute=minute)
                     if when < start or when >= end:
                         continue
-                    # A data-interval run fires at the *end* of its interval.
+                    # A data-interval run fires at the end of its interval.
                     # Airflow's earliest restriction applies to the interval
-                    # start, so the first cron boundary in the window starts an
-                    # interval but does not itself produce a run.
+                    # start, so the first boundary starts an interval but does
+                    # not itself produce a run.
                     if fields.skip_first and not skipped_first:
                         skipped_first = True
                         continue
-                    if when < end:
-                        yield when
-                        emitted += 1
-                        if emitted >= cap:
-                            return
+                    yield when
+                    emitted += 1
+                    if emitted >= cap:
+                        return
         day += timedelta(days=1)
 
 
@@ -184,6 +192,9 @@ def iter_runs(
     counted. Over a month-wide window this leading-edge effect is at most one run
     per DAG and immaterial to the picture.
 
+    ``@continuous`` and ``@once`` yield nothing: neither has a planned future
+    time to place on the calendar (see ``_UNPLANNED_TIMETABLES``).
+
     Examples
     --------
     >>> from datetime import datetime, timezone
@@ -194,6 +205,9 @@ def iter_runs(
     >>> len(list(iter_runs(tt, window_start=start, window_end=end)))
     2
     """
+    if type(timetable).__name__ in _UNPLANNED_TIMETABLES:
+        return
+
     fast_fields = _fast_cron_fields(timetable, window_start)
     if fast_fields is not None:
         yield from _iter_standard_utc_cron(
@@ -209,16 +223,27 @@ def iter_runs(
     latest = pendulum.instance(window_end)
     restriction = TimeRestriction(earliest=earliest, latest=latest, catchup=True)
     last_interval = None
+    previous: datetime | None = None
     for _ in range(cap):
         info = timetable.next_dagrun_info(last_automated_data_interval=last_interval, restriction=restriction)
         if info is None:
             return
         run_after = info.run_after
+        # A timetable that answers with the same instant (or an earlier one)
+        # never leaves the window: it would fill `cap` with one timestamp.
+        if previous is not None and run_after <= previous:
+            log.warning("%s stopped advancing at %s; skipping the rest", type(timetable).__name__, run_after)
+            return
+        previous = run_after
         if run_after >= latest:
             return
         if run_after >= earliest:
             yield run_after
         last_interval = info.data_interval
+    else:
+        # Sub-minute schedules exhaust the cap mid-window: the tail is missing
+        # from the picture, and silently so without this line.
+        log.warning("%s hit the %d-run cap; the window is only partly covered", type(timetable).__name__, cap)
 
 
 def events_for(
@@ -245,8 +270,13 @@ def events_for(
     RunEvent
         One event per planned run of ``dag`` within the window.
     """
-    for when in iter_runs(dag.timetable, window_start=window_start, window_end=window_end, cap=cap):
-        yield RunEvent(when=when, task_count=dag.task_count, team=dag.team)
+    # One broken timetable must not take down the whole recompute: expansion
+    # runs third-party code (provider and user-defined timetables).
+    try:
+        for when in iter_runs(dag.timetable, window_start=window_start, window_end=window_end, cap=cap):
+            yield RunEvent(when=when, task_count=dag.task_count, team=dag.team)
+    except Exception:
+        log.exception("Skipping %s: its timetable failed to expand", dag.dag_id)
 
 
 def _timetable_key(timetable: Timetable) -> str:
